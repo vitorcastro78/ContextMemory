@@ -1,0 +1,52 @@
+# ContextMemory Middleware — Cursor Rules
+
+## Arquitectura
+- NUNCA criar dependências de Api para Core directamente — usar interfaces
+- NUNCA guardar estado em variáveis estáticas — usar ConcurrentDictionary injectado
+- NUNCA bloquear o thread principal com .Result ou .Wait() — sempre async/await
+- SEMPRE usar CancellationToken em todos os métodos de I/O e HTTP
+- SEMPRE usar records para modelos imutáveis (OllamaRequest, OllamaResponse, etc.)
+
+## Contrato Ollama
+- NUNCA alterar campos do request que não sejam messages[]
+- NUNCA modificar a response do Ollama — apenas fazer pipe ao cliente
+- SEMPRE preservar todos os campos de métricas (total_duration, eval_count, etc.)
+- SEMPRE propagar erros HTTP do Ollama com o mesmo status code ao cliente
+- SEMPRE suportar streaming e non-streaming no mesmo endpoint
+
+## Isolamento de Contexto
+- NUNCA misturar histórico de utilizadores diferentes
+- NUNCA misturar wikis de appIds diferentes
+- SEMPRE usar a chave composta (appId, userId) para qualquer operação de memória
+- SEMPRE validar appId + API key antes de qualquer acesso a dados
+
+## Performance
+- NUNCA deserializar o vector cache completo para verificar validade — usar hash file separado
+- NUNCA re-indexar a wiki completa quando só um ficheiro muda — usar hot-reload por ficheiro
+- SEMPRE usar SIMD (System.Numerics.Vector) no cálculo de cosine similarity
+- SEMPRE fazer ProfileLearner async e desacoplado — não pode atrasar a resposta ao cliente
+
+## Segurança
+- NUNCA loggar conteúdo de mensagens dos utilizadores
+- NUNCA expor API keys em logs ou responses de erro
+- SEMPRE validar tamanho do payload de entrada (max 1MB por request)
+- SEMPRE sanitizar appId e userId (apenas alfanumérico + hífens, max 64 chars)
+
+## Feedback e Guardrails
+- NUNCA bloquear o pipeline principal com operações de FeedbackStore — sempre async fire-and-forget
+- NUNCA loggar conteúdo de mensagens filtradas além do motivo do filtro
+- SEMPRE aplicar ContentFilter PRE antes de enriquecer o contexto
+- SEMPRE aplicar ContentFilter POST antes de devolver ao cliente
+- SEMPRE registar em AuditLog quando ContentFilter bloqueia ou modifica uma mensagem
+
+## Admin e Observabilidade
+- NUNCA expor endpoints /admin sem validação do MASTER_KEY
+- NUNCA expor dados de um appId nos endpoints de outro appId
+- SEMPRE incluir appId em todas as métricas Prometheus (label obrigatória)
+- SEMPRE implementar GET /health como liveness check real (não apenas 200 OK estático)
+
+## Rate Limiting
+- NUNCA implementar rate limiting com Thread.Sleep ou bloqueios síncronos
+- SEMPRE usar SlidingWindowRateLimiter nativo do .NET 9
+- SEMPRE incluir header Retry-After na resposta 429
+- SEMPRE contar tokens estimados (chars / 4) quando tokens reais não disponíveis

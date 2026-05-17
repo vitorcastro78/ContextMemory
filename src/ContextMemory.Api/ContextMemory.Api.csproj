@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ContextMemory.Core\ContextMemory.Core.csproj" />
+    <ProjectReference Include="..\ContextMemory.Adapters\ContextMemory.Adapters.csproj" />
+    <ProjectReference Include="..\ContextMemory.Embeddings\ContextMemory.Embeddings.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,21 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## Dados locais
+data/
+!data/.gitkeep
+
+## Modelos ONNX (não commitar ficheiros grandes)
+src/ContextMemory.Embeddings/models/*.onnx
+
+## Ambiente
+.env
+*.env.local
+
+## IDE
+.idea/
+*.swp
