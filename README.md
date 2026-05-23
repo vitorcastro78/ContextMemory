@@ -56,6 +56,7 @@ The sample `kyc-dev` entry in `appsettings.json` is only a **local development s
 ### Core (Ollama-compatible gateway)
 
 - `POST /api/chat` — Full Ollama request/response contract; supports streaming (NDJSON) and non-streaming JSON
+- `POST /api/generate` — Ollama generate API pass-through (no conversation enrichment); streaming supported
 - Only `messages[]` is modified; model metrics and response fields are preserved and piped through
 - Pluggable LLM backends per app: `ollama` | `lmstudio` | `openai`
 
@@ -91,6 +92,7 @@ Config lives in `data/app-profiles/{appId}/` (`persona.md`, `business-rules.md`,
 ### App lifecycle
 
 - `POST /apps/register` — Create a new app at runtime (master key)
+- `GET /apps/{appId}` — App metadata (wiki path, LLM backend, rate limits)
 - `GET/PATCH /apps/{appId}/config` — Read/update runtime config
 - `PUT /apps/{appId}/session-context` — Set ephemeral session context for a user
 
@@ -317,7 +319,9 @@ File: `data/app-profiles/{appId}/content-rules.json`
 ### App key (`X-App-Id` + `X-User-Id` + `Authorization: Bearer <apiKey>`)
 
 - `POST /api/chat`
+- `POST /api/generate`
 - `POST /api/chat/feedback`
+- `GET /apps/{appId}`
 - `GET|PATCH /apps/{appId}/config`
 - `PUT /apps/{appId}/session-context`
 - `POST /apps/{appId}/wiki` (multipart `.md` upload)

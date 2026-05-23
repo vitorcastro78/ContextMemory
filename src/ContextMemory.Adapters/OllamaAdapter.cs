@@ -107,6 +107,44 @@ public sealed class OllamaAdapter : ILlmAdapter
             ?? throw new InvalidOperationException("Empty response from Ollama.");
     }
 
+    public async IAsyncEnumerable<OllamaResponse> GenerateStreamAsync(
+        OllamaGenerateRequest request,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var streamRequest = request with { Stream = true };
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/api/generate")
+        {
+            Content = JsonContent.Create(streamRequest, options: JsonOptions)
+        };
+
+        using var response = await _httpClient
+            .SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            throw new HttpRequestException(body, null, response.StatusCode);
+        }
+
+        await using var stream = await response.Content
+            .ReadAsStreamAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        using var reader = new StreamReader(stream);
+        while (!reader.EndOfStream)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            var chunk = JsonSerializer.Deserialize<OllamaResponse>(line, JsonOptions);
+            if (chunk is not null)
+                yield return chunk;
+        }
+    }
+
     public async Task<bool> IsHealthyAsync(CancellationToken cancellationToken = default)
     {
         try

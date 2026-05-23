@@ -1,0 +1,65 @@
+using ContextMemory.Api.Middleware;
+using ContextMemory.Core.Contracts;
+using ContextMemory.Core.Models;
+
+namespace ContextMemory.Api.Endpoints;
+
+public static class AppsEndpoint
+{
+    public static void MapAppsEndpoint(this WebApplication app)
+    {
+        app.MapGet("/apps/{appId}", GetAppAsync);
+    }
+
+    private static IResult GetAppAsync(
+        HttpContext httpContext,
+        string appId,
+        IAppRegistry appRegistry,
+        IAppConfigStore appConfigStore)
+    {
+        var headerAppId = httpContext.Items[AuthMiddleware.AppIdItemKey] as string;
+        if (!string.Equals(headerAppId, appId, StringComparison.Ordinal))
+        {
+            return Results.Json(
+                new { error = "X-App-Id does not match the requested appId." },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
+
+        if (!appRegistry.TryGetApp(appId, out var profile) || profile is null)
+            return Results.NotFound(new { error = "App not found." });
+
+        var config = appConfigStore.GetConfig(appId);
+
+        return Results.Json(new AppDetailResponse
+        {
+            AppId = profile.AppId,
+            DefaultLanguage = profile.DefaultLanguage,
+            WikiPath = profile.WikiPath,
+            MaxHistoryMessages = profile.MaxHistoryMessages,
+            WikiChunksTopK = profile.WikiChunksTopK,
+            SimilarityThreshold = profile.SimilarityThreshold,
+            LlmBackend = config.LlmBackend,
+            LlmModel = config.LlmModel,
+            StreamingEnabled = config.StreamingEnabled,
+            RateLimits = config.RateLimits,
+            WikiUploadEndpoint = $"/apps/{appId}/wiki",
+            ConfigEndpoint = $"/apps/{appId}/config"
+        });
+    }
+}
+
+public record AppDetailResponse
+{
+    public required string AppId { get; init; }
+    public string DefaultLanguage { get; init; } = "pt-PT";
+    public string WikiPath { get; init; } = string.Empty;
+    public int MaxHistoryMessages { get; init; }
+    public int WikiChunksTopK { get; init; }
+    public float SimilarityThreshold { get; init; }
+    public string LlmBackend { get; init; } = "ollama";
+    public string LlmModel { get; init; } = string.Empty;
+    public bool StreamingEnabled { get; init; }
+    public RateLimitConfig RateLimits { get; init; } = new();
+    public string WikiUploadEndpoint { get; init; } = string.Empty;
+    public string ConfigEndpoint { get; init; } = string.Empty;
+}

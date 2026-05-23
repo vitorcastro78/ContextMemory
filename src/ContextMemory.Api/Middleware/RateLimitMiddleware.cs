@@ -21,7 +21,11 @@ public sealed class RateLimitMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (!context.Request.Path.StartsWithSegments("/api/chat", StringComparison.OrdinalIgnoreCase))
+        var path = context.Request.Path;
+        var isLlmRoute = path.StartsWithSegments("/api/chat", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWithSegments("/api/generate", StringComparison.OrdinalIgnoreCase);
+
+        if (!isLlmRoute)
         {
             await _next(context).ConfigureAwait(false);
             return;

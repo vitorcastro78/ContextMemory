@@ -597,45 +597,45 @@ public interface ILlmAdapter
 ## 12. Fases de Implementação
 
 ### Fase 1 — Core MVP (implementar primeiro)
-- [ ] Estrutura do projecto + solution .NET 9
-- [ ] Modelos `OllamaRequest` / `OllamaResponse` completos
-- [ ] `POST /api/chat` com pass-through simples ao Ollama
-- [ ] `AuthMiddleware` (X-App-Id + X-User-Id + API key)
-- [ ] `ConversationMemory` (sliding window em memória)
-- [ ] `PromptComposer` básico (system prompt fixo por appId)
-- [ ] `OllamaAdapter` com streaming NDJSON pipe
-- [ ] Persistência de histórico em JSON local
+- [x] Estrutura do projecto + solution .NET 9
+- [x] Modelos `OllamaRequest` / `OllamaResponse` completos
+- [x] `POST /api/chat` com pass-through simples ao Ollama
+- [x] `AuthMiddleware` (X-App-Id + X-User-Id + API key)
+- [x] `ConversationMemory` (sliding window em memória)
+- [x] `PromptComposer` básico (system prompt fixo por appId)
+- [x] `OllamaAdapter` com streaming NDJSON pipe
+- [x] Persistência de histórico em JSON local
 
 ### Fase 2 — RAG e Wiki
-- [ ] `WikiLoader` com chunking por header via Markdig
-- [ ] `OnnxEmbeddingEngine` (all-MiniLM-L6-v2 exportado para ONNX)
-- [ ] `VectorStore` in-memory por appId com cache .bin
-- [ ] `SimilaritySearch` cosine similarity + SIMD
-- [ ] `FileSystemWatcher` para hot-reload da wiki
-- [ ] Integração RAG no `ContextEngine`
+- [x] `WikiLoader` com chunking por header via Markdig
+- [x] `OnnxEmbeddingEngine` (all-MiniLM-L6-v2 exportado para ONNX)
+- [x] `VectorStore` in-memory por appId com cache .bin
+- [x] `SimilaritySearch` cosine similarity + SIMD
+- [x] `FileSystemWatcher` para hot-reload da wiki
+- [x] Integração RAG no `ContextEngine`
 
 ### Fase 3 — Prompt Dinâmico e Perfis
-- [ ] `PromptComposer` dinâmico com todos os blocos
-- [ ] `IntentDetector` (classifica intent da mensagem)
-- [ ] `AppConfigStore` (config editável por appId)
-- [ ] `UserProfileStore` (factos por userId)
-- [ ] `ProfileLearner` async (extrai factos das conversas)
+- [x] `PromptComposer` dinâmico com todos os blocos
+- [x] `IntentDetector` (classifica intent da mensagem)
+- [x] `AppConfigStore` (config editável por appId)
+- [x] `UserProfileStore` (factos por userId)
+- [x] `ProfileLearner` async (extrai factos das conversas)
 
 ### Fase 4 — Memória Longa e Auto-registo
-- [ ] `SemanticMemory` (embeddings de longo prazo por userId)
-- [ ] `SessionSummarizer` (comprime histórico antigo via LLM)
-- [ ] `POST /apps/register` (auto-registo de novas apps)
-- [ ] `POST /apps/{appId}/wiki` (upload e re-indexação de wiki)
-- [ ] `LmStudioAdapter` + `OpenAiAdapter`
+- [x] `SemanticMemory` (embeddings de longo prazo por userId)
+- [x] `SessionSummarizer` (comprime histórico antigo via LLM)
+- [x] `POST /apps/register` (auto-registo de novas apps)
+- [x] `POST /apps/{appId}/wiki` (upload e re-indexação de wiki)
+- [x] `LmStudioAdapter` + `OpenAiAdapter`
 
 ### Fase 5 — Técnicas Big Tech + Produção
 
 #### 5A — FeedbackStore (replica ChatGPT thumbs up/down)
-- [ ] `POST /api/chat/feedback` — endpoint para receber feedback explícito por `messageId`
-- [ ] `ImplicitFeedbackDetector` — detecta feedback negativo implícito (utilizador reformula, pede para repetir, diz "não era isso")
-- [ ] `FeedbackStore` — regista feedback por `(appId, userId, messageId)` com score e motivo
-- [ ] Integração com `ProfileLearner` — feedback negativo ajusta factos do `UserProfileStore`
-- [ ] Integração com `AppConfigStore` — padrões de feedback repetidos ajustam blocos do prompt da aplicação
+- [x] `POST /api/chat/feedback` — endpoint para receber feedback explícito por `messageId`
+- [x] `ImplicitFeedbackDetector` — detecta feedback negativo implícito (utilizador reformula, pede para repetir, diz "não era isso")
+- [x] `FeedbackStore` — regista feedback por `(appId, userId, messageId)` com score e motivo
+- [x] Integração com `ProfileLearner` — feedback negativo ajusta factos do `UserProfileStore` (via `FeedbackProcessor`)
+- [x] Integração com `AppConfigStore` — padrões de feedback repetidos ajustam blocos do prompt da aplicação
 
 ```csharp
 // FeedbackStore.cs
@@ -648,10 +648,10 @@ public interface ILlmAdapter
 ```
 
 #### 5B — ContentFilter / Guardrails (replica safety layers do Claude e ChatGPT)
-- [ ] `ContentFilter` — filtra conteúdo antes de enviar ao LLM e antes de devolver ao cliente
-- [ ] Configurável por `appId` — cada aplicação define as suas regras em `content-rules.json`
-- [ ] Tipos de filtro: `BlockedTopics`, `RequiredDisclaimer`, `MaxResponseLength`, `LanguageEnforcement`
-- [ ] `AuditLog` — regista todas as mensagens filtradas com motivo (append-only, por `appId`)
+- [x] `ContentFilter` — filtra conteúdo antes de enviar ao LLM e antes de devolver ao cliente
+- [x] Configurável por `appId` — cada aplicação define as suas regras em `content-rules.json`
+- [x] Tipos de filtro: `BlockedTopics`, `RequiredDisclaimer`, `MaxResponseLength`, `LanguageEnforcement`
+- [x] `AuditLog` — regista todas as mensagens filtradas com motivo (append-only, por `appId`)
 
 ```csharp
 // ContentFilter.cs — pipeline de filtros por appId
@@ -668,12 +668,12 @@ public interface ILlmAdapter
 ```
 
 #### 5C — AdminDashboard (replica consola de gestão das big tech)
-- [ ] `GET /admin/apps` — lista todas as aplicações registadas com métricas
-- [ ] `GET /admin/apps/{appId}/stats` — tokens consumidos, utilizadores activos, latência média
-- [ ] `GET /admin/apps/{appId}/users` — lista userId com nº de sessões e factos aprendidos
-- [ ] `PATCH /admin/apps/{appId}/config` — editar config da aplicação em runtime
-- [ ] `DELETE /admin/apps/{appId}/users/{userId}/memory` — apagar memória de um utilizador (GDPR)
-- [ ] Interface HTML mínima servida em `GET /admin` (sem framework — HTML + Alpine.js CDN)
+- [x] `GET /admin/apps` — lista todas as aplicações registadas com métricas
+- [x] `GET /admin/apps/{appId}/stats` — tokens consumidos, utilizadores activos, latência média
+- [x] `GET /admin/apps/{appId}/users` — lista userId com nº de sessões e factos aprendidos
+- [x] `PATCH /admin/apps/{appId}/config` — editar config da aplicação em runtime
+- [x] `DELETE /admin/apps/{appId}/users/{userId}/memory` — apagar memória de um utilizador (GDPR)
+- [x] Interface HTML mínima servida em `GET /admin` (sem framework — HTML + Alpine.js CDN)
 
 ```
 Admin endpoints (protegidos por CONTEXT_MEMORY_MASTER_KEY):
@@ -688,9 +688,9 @@ GET  /admin/apps/{appId}/audit           → log de conteúdo filtrado
 ```
 
 #### 5D — Observabilidade (replica telemetria interna das big tech)
-- [ ] `GET /health` — liveness + readiness (verifica Ollama acessível + stores carregados)
-- [ ] `GET /metrics` — formato Prometheus com métricas chave
-- [ ] `TelemetryMiddleware` — regista latência, tokens, erros por `appId` em `ConcurrentDictionary`
+- [x] `GET /health` — liveness + readiness (verifica Ollama acessível + stores carregados)
+- [x] `GET /metrics` — formato Prometheus com métricas chave
+- [x] `TelemetryMiddleware` — regista latência, tokens, erros por `appId` em `ConcurrentDictionary`
 - [ ] Métricas expostas:
   - `cm_requests_total{appId, status}` — total de pedidos
   - `cm_tokens_prompt_total{appId}` — tokens de prompt consumidos
@@ -701,18 +701,24 @@ GET  /admin/apps/{appId}/audit           → log de conteúdo filtrado
   - `cm_content_filtered_total{appId, reason}` — mensagens filtradas por motivo
 
 #### 5E — Rate Limiting (replica quotas das big tech)
-- [ ] Rate limiting por `appId` — tokens por minuto e pedidos por minuto
-- [ ] Rate limiting por `userId` dentro de `appId` — pedidos por minuto por utilizador
-- [ ] Configurável em `config.json` por appId: `"rateLimits": { "requestsPerMinute": 60, "tokensPerMinute": 100000 }`
-- [ ] Response `429 Too Many Requests` com header `Retry-After` (idêntico ao comportamento do Ollama/OpenAI)
-- [ ] Implementação: `SlidingWindowRateLimiter` de `System.Threading.RateLimiting` (.NET 9 nativo)
+- [x] Rate limiting por `appId` — tokens por minuto e pedidos por minuto
+- [x] Rate limiting por `userId` dentro de `appId` — pedidos por minuto por utilizador
+- [x] Configurável em `config.json` por appId: `"rateLimits": { "requestsPerMinute": 60, "tokensPerMinute": 100000 }`
+- [x] Response `429 Too Many Requests` com header `Retry-After` (idêntico ao comportamento do Ollama/OpenAI)
+- [x] Implementação: `SlidingWindowRateLimiter` de `System.Threading.RateLimiting` (.NET 9 nativo)
 
 #### 5F — Testes e Docker
-- [ ] Testes de integração end-to-end com `WebApplicationFactory` (simula cliente real)
-- [ ] Testes de contrato Ollama — verifica que request/response são 100% idênticos ao Ollama nativo
-- [ ] Testes de isolamento — verifica que userId A nunca acede a contexto de userId B
-- [ ] `Dockerfile` multi-stage (build + runtime, imagem final < 200MB)
-- [ ] `docker-compose.yml` completo com Ollama + GPU support (já na Secção 16)
+- [x] Testes de integração end-to-end com `WebApplicationFactory` (simula cliente real)
+- [x] Testes de contrato Ollama — verifica que request/response são 100% idênticos ao Ollama nativo (stub handler)
+- [x] Testes de isolamento — verifica que userId A nunca acede a contexto de userId B
+- [x] `Dockerfile` multi-stage (build + runtime, imagem final < 200MB)
+- [x] `docker-compose.yml` completo com Ollama + GPU support (já na Secção 16)
+
+#### Pós-blueprint (gaps fechados)
+- [x] `POST /api/generate` — pass-through Ollama (streaming + non-streaming)
+- [x] `GET /apps/{appId}` — metadados da aplicação registada
+- [x] GitHub Actions CI (`build` + `test`)
+- [x] Seed `kyc-dev` movido para `appsettings.Development.json` apenas
 
 ---
 
