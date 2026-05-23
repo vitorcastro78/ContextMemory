@@ -427,6 +427,7 @@ Exposed at `GET /metrics` (no auth):
 - `cm_latency_ms{appId,percentile}` (p50, p95, p99)
 - `cm_rag_hits_total{appId}`
 - `cm_feedback_score{appId}`
+- `cm_active_users{appId}`
 - `cm_content_filtered_total{appId,reason}`
 
 ---
