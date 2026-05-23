@@ -27,10 +27,12 @@ public static class AdminEndpoint
     private static async Task<IResult> GetStats(string appId, ITelemetryCollector telemetry, IFeedbackStore feedback)
     {
         var avg = await feedback.GetAverageScoreAsync(appId).ConfigureAwait(false);
+        var snapshot = telemetry.GetAppSnapshot(appId);
         return Results.Json(new
         {
             appId,
-            telemetry = telemetry.GetAppSnapshot(appId),
+            activeUsers = snapshot.ActiveUsers,
+            telemetry = snapshot,
             feedbackAverage = avg
         });
     }

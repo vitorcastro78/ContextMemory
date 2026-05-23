@@ -26,6 +26,7 @@ public class ContextMemoryOptions
     public bool AdminEnabled { get; set; } = true;
     public int DefaultRateLimitRpm { get; set; } = 60;
     public int DefaultRateLimitTpm { get; set; } = 100_000;
+    public int ActiveUserWindowMinutes { get; set; } = 15;
     public Dictionary<string, AppOptionsEntry> Apps { get; set; } = new();
 }
 

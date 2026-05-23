@@ -719,6 +719,10 @@ GET  /admin/apps/{appId}/audit           → log de conteúdo filtrado
 - [x] `GET /apps/{appId}` — metadados da aplicação registada
 - [x] GitHub Actions CI (`build` + `test`)
 - [x] Seed `kyc-dev` movido para `appsettings.Development.json` apenas
+- [x] `cm_active_users` + campo `activeUsers` em `/admin/apps/{appId}/stats`
+- [x] CI valida imagem Docker &lt; 200MB
+- [x] Testes Ollama E2E (smoke com service container no CI)
+- [x] `ProfileLearner` consome `FeedbackStore` (histórico + feedback em tempo real)
 
 ---
 

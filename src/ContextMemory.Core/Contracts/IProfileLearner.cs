@@ -7,4 +7,6 @@ public interface IProfileLearner
         string userId,
         string userMessage,
         string assistantMessage);
+
+    void LearnFromFeedback(string appId, string userId, int score, string? reason);
 }

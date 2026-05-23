@@ -1,4 +1,5 @@
 using ContextMemory.Core.Contracts;
+using ContextMemory.Core.Models;
 using Microsoft.Extensions.Logging;
 
 namespace ContextMemory.Core.Profile;
@@ -7,15 +8,21 @@ public sealed class ProfileLearner : IProfileLearner
 {
     private readonly IUserProfileStore _userProfileStore;
     private readonly ISemanticMemory _semanticMemory;
+    private readonly IFeedbackStore _feedbackStore;
+    private readonly IAppConfigStore _appConfigStore;
     private readonly ILogger<ProfileLearner> _logger;
 
     public ProfileLearner(
         IUserProfileStore userProfileStore,
         ISemanticMemory semanticMemory,
+        IFeedbackStore feedbackStore,
+        IAppConfigStore appConfigStore,
         ILogger<ProfileLearner> logger)
     {
         _userProfileStore = userProfileStore;
         _semanticMemory = semanticMemory;
+        _feedbackStore = feedbackStore;
+        _appConfigStore = appConfigStore;
         _logger = logger;
     }
 
@@ -28,6 +35,11 @@ public sealed class ProfileLearner : IProfileLearner
         _ = LearnFromTurnAsync(appId, userId, userMessage, assistantMessage);
     }
 
+    public void LearnFromFeedback(string appId, string userId, int score, string? reason)
+    {
+        _ = LearnFromFeedbackAsync(appId, userId, score, reason);
+    }
+
     private async Task LearnFromTurnAsync(
         string appId,
         string userId,
@@ -37,31 +49,133 @@ public sealed class ProfileLearner : IProfileLearner
         try
         {
             var facts = ExtractFacts(userMessage, assistantMessage);
-            if (facts.Count == 0)
-                return;
-
-            await _userProfileStore
-                .AddOrConfirmFactsAsync(appId, userId, facts, 0.6f, CancellationToken.None)
-                .ConfigureAwait(false);
-
-            foreach (var fact in facts)
+            if (facts.Count > 0)
             {
-                await _semanticMemory
-                    .StoreFactAsync(appId, userId, fact, CancellationToken.None)
+                await _userProfileStore
+                    .AddOrConfirmFactsAsync(appId, userId, facts, 0.6f, CancellationToken.None)
                     .ConfigureAwait(false);
+
+                foreach (var fact in facts)
+                {
+                    await _semanticMemory
+                        .StoreFactAsync(appId, userId, fact, CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+
+                _logger.LogInformation(
+                    "Learned {Count} profile fact(s) for {AppId}/{UserId}",
+                    facts.Count,
+                    appId,
+                    userId);
             }
 
-            _logger.LogInformation(
-                "Learned {Count} profile fact(s) for {AppId}/{UserId}",
-                facts.Count,
-                appId,
-                userId);
+            await ApplyFeedbackHistoryAsync(appId, userId).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Profile learning failed for {AppId}/{UserId}", appId, userId);
         }
     }
+
+    private async Task LearnFromFeedbackAsync(
+        string appId,
+        string userId,
+        int score,
+        string? reason)
+    {
+        try
+        {
+            if (score > 0 && reason is not null)
+            {
+                var positiveFact = MapPositiveFeedbackToFact(reason);
+                if (positiveFact is not null)
+                {
+                    await _userProfileStore
+                        .AddOrConfirmFactsAsync(appId, userId, [positiveFact], 0.8f, CancellationToken.None)
+                        .ConfigureAwait(false);
+                }
+            }
+
+            if (score < 0)
+                await ApplyNegativeFeedbackAsync(appId, userId, reason).ConfigureAwait(false);
+
+            await ApplyFeedbackHistoryAsync(appId, userId).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Feedback learning failed for {AppId}/{UserId}", appId, userId);
+        }
+    }
+
+    private async Task ApplyFeedbackHistoryAsync(string appId, string userId)
+    {
+        var entries = await _feedbackStore.GetByAppAsync(appId, CancellationToken.None).ConfigureAwait(false);
+        var userEntries = entries
+            .Where(e => string.Equals(e.UserId, userId, StringComparison.Ordinal))
+            .OrderByDescending(e => e.Timestamp)
+            .Take(50)
+            .ToList();
+
+        if (userEntries.Count == 0)
+            return;
+
+        var negativeLong = userEntries.Count(e =>
+            e.Score < 0
+            && e.Reason is not null
+            && (e.Reason.Contains("long", StringComparison.OrdinalIgnoreCase)
+                || e.Reason.Contains("curto", StringComparison.OrdinalIgnoreCase)));
+
+        if (negativeLong >= 3)
+        {
+            await _userProfileStore
+                .AddOrConfirmFactsAsync(appId, userId, ["Prefere respostas curtas e concisas"], 0.9f, CancellationToken.None)
+                .ConfigureAwait(false);
+        }
+    }
+
+    private async Task ApplyNegativeFeedbackAsync(string appId, string userId, string? reason)
+    {
+        if (reason is not null && (
+            reason.Contains("curto", StringComparison.OrdinalIgnoreCase)
+            || reason.Contains("long", StringComparison.OrdinalIgnoreCase)))
+        {
+            var count = await _feedbackStore
+                .CountNegativeByReasonAsync(appId, "long", CancellationToken.None)
+                .ConfigureAwait(false);
+
+            if (count >= 3)
+            {
+                await _userProfileStore
+                    .AddOrConfirmFactsAsync(appId, userId, ["Prefere respostas curtas e concisas"], 0.85f, CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+        }
+
+        if (reason is not null && reason.Contains("format", StringComparison.OrdinalIgnoreCase))
+        {
+            var count = await _feedbackStore
+                .CountNegativeByReasonAsync(appId, "format", CancellationToken.None)
+                .ConfigureAwait(false);
+
+            if (count >= 3)
+            {
+                var config = _appConfigStore.GetConfig(appId);
+                await _appConfigStore.UpdateAsync(appId, new AppConfigPatchRequest
+                {
+                    FormatRules = config.FormatRules + "\n- Prioriza respostas em formato de lista numerada."
+                }, CancellationToken.None).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static string? MapPositiveFeedbackToFact(string reason) =>
+        reason.ToLowerInvariant() switch
+        {
+            var r when r.Contains("curto") || r.Contains("concis") => "Prefere respostas curtas e concisas",
+            var r when r.Contains("detalh") => "Prefere respostas detalhadas",
+            var r when r.Contains("lista") || r.Contains("format") => "Prefere respostas em formato de lista",
+            _ => null
+        };
 
     internal static List<string> ExtractFacts(string userMessage, string assistantMessage)
     {

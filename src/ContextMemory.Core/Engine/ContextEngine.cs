@@ -92,7 +92,7 @@ public sealed class ContextEngine : IContextEngine
         var preResult = await RunPrePipelineAsync(app, userId, lastUserMessage, cancellationToken).ConfigureAwait(false);
         if (preResult is not null)
         {
-            RecordTelemetry(appId, preResult.StatusCode, sw.ElapsedMilliseconds, 0, 0, false);
+            RecordTelemetry(appId, userId, preResult.StatusCode, sw.ElapsedMilliseconds, 0, 0, false);
             return preResult;
         }
 
@@ -105,7 +105,7 @@ public sealed class ContextEngine : IContextEngine
         var result = await PostProcessResponseAsync(
             app, userId, request, response, runtimeConfig, promptTokens, ragHit, cancellationToken).ConfigureAwait(false);
 
-        RecordTelemetry(appId, result.StatusCode, sw.ElapsedMilliseconds, promptTokens, result.EstimatedCompletionTokens, result.RagHit);
+        RecordTelemetry(appId, userId, result.StatusCode, sw.ElapsedMilliseconds, promptTokens, result.EstimatedCompletionTokens, result.RagHit);
         return result;
     }
 
@@ -374,8 +374,15 @@ public sealed class ContextEngine : IContextEngine
         _ = _sessionSummarizer.MaybeSummarizeAsync(app.AppId, userId, model, runtimeConfig.LlmBackend, CancellationToken.None);
     }
 
-    private void RecordTelemetry(string appId, int statusCode, double latencyMs, int promptTokens, int completionTokens, bool ragHit) =>
-        _telemetry.RecordRequest(appId, statusCode, latencyMs, promptTokens, completionTokens, ragHit);
+    private void RecordTelemetry(
+        string appId,
+        string userId,
+        int statusCode,
+        double latencyMs,
+        int promptTokens,
+        int completionTokens,
+        bool ragHit) =>
+        _telemetry.RecordRequest(appId, userId, statusCode, latencyMs, promptTokens, completionTokens, ragHit);
 
     private static OllamaMessage? GetLastUserMessage(OllamaRequest request) =>
         request.Messages.LastOrDefault(m => string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase));

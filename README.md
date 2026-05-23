@@ -456,8 +456,14 @@ ContextMemoryMiddleware/
 ## Development
 
 ```bash
-# Run tests
-dotnet test
+# Run tests (excludes Ollama E2E)
+dotnet test --filter "Category!=OllamaE2E"
+
+# Ollama E2E smoke (requires Ollama running locally)
+OLLAMA_E2E=1 dotnet test --filter "Category=OllamaE2E"
+
+# Optional: full chat E2E with a pulled model
+OLLAMA_E2E=1 OLLAMA_E2E_MODEL=llama3.2 dotnet test --filter "Category=OllamaE2E"
 
 # Run API with hot reload
 cd src/ContextMemory.Api
