@@ -175,7 +175,8 @@ public sealed class AuthMiddleware
 
     private static bool IsPublicPath(PathString path) =>
         path.StartsWithSegments("/health", StringComparison.OrdinalIgnoreCase)
-        || path.StartsWithSegments("/metrics", StringComparison.OrdinalIgnoreCase);
+        || path.StartsWithSegments("/metrics", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWithSegments("/swagger", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAdminPath(PathString path) =>
         path.StartsWithSegments("/admin", StringComparison.OrdinalIgnoreCase);

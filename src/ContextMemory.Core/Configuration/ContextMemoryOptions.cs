@@ -8,6 +8,7 @@ public class ContextMemoryOptions
     public string DataPath { get; set; } = "./data";
     public string WikiPath { get; set; } = "./wikis";
     public string OllamaEndpoint { get; set; } = "http://localhost:11434";
+    public int OllamaRequestTimeoutSeconds { get; set; } = 600;
     public int MaxHistoryMessages { get; set; } = 20;
     public int MaxPayloadBytes { get; set; } = 1_048_576;
     public int WikiChunksTopK { get; set; } = 5;

@@ -28,6 +28,7 @@ builder.Services.Configure<ContextMemory.Embeddings.Configuration.EmbeddingsOpti
 });
 
 builder.Services.AddContextMemory(builder.Configuration);
+builder.Services.AddContextMemorySwagger();
 
 var app = builder.Build();
 
@@ -38,6 +39,8 @@ if (PersistenceProviders.IsPostgres(builder.Configuration.GetSection(ContextMemo
     await using var db = await dbFactory.CreateDbContextAsync();
     await db.Database.MigrateAsync();
 }
+
+app.UseContextMemorySwagger();
 
 app.UseMiddleware<AuthMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();

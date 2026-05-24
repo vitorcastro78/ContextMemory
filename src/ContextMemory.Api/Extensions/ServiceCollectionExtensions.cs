@@ -65,12 +65,14 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITelemetryCollector, TelemetryCollector>();
         services.AddSingleton<IRateLimitService, RateLimitService>();
 
-        services.AddHttpClient<OllamaAdapter>();
+        services.AddHttpClient<OllamaAdapter>((sp, client) =>
+        {
+            var timeout = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<ContextMemoryOptions>>().Value
+                .OllamaRequestTimeoutSeconds;
+            client.Timeout = TimeSpan.FromSeconds(Math.Max(30, timeout));
+        });
         services.AddHttpClient<LmStudioAdapter>();
         services.AddHttpClient<OpenAiAdapter>();
-        services.AddSingleton<OllamaAdapter>();
-        services.AddSingleton<LmStudioAdapter>();
-        services.AddSingleton<OpenAiAdapter>();
         services.AddSingleton<ILlmAdapterResolver, LlmAdapterResolver>();
 
         services.AddHostedService<AppConfigBootstrapHostedService>();
