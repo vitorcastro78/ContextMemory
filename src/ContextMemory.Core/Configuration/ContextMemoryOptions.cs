@@ -27,6 +27,8 @@ public class ContextMemoryOptions
     public int DefaultRateLimitRpm { get; set; } = 60;
     public int DefaultRateLimitTpm { get; set; } = 100_000;
     public int ActiveUserWindowMinutes { get; set; } = 15;
+    /// <summary>File (default) or Postgres. When Postgres, set ConnectionStrings:ContextMemory.</summary>
+    public string PersistenceProvider { get; set; } = "File";
     public Dictionary<string, AppOptionsEntry> Apps { get; set; } = new();
 }
 

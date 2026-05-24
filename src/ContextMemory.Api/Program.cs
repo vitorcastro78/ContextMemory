@@ -2,6 +2,9 @@ using ContextMemory.Api.Endpoints;
 using ContextMemory.Api.Extensions;
 using ContextMemory.Api.Middleware;
 using ContextMemory.Core.Configuration;
+using ContextMemory.Core.Persistence;
+using ContextMemory.Core.Persistence.Postgres;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,6 +30,14 @@ builder.Services.Configure<ContextMemory.Embeddings.Configuration.EmbeddingsOpti
 builder.Services.AddContextMemory(builder.Configuration);
 
 var app = builder.Build();
+
+if (PersistenceProviders.IsPostgres(builder.Configuration.GetSection(ContextMemoryOptions.SectionName)["PersistenceProvider"]))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ContextMemoryDbContext>>();
+    await using var db = await dbFactory.CreateDbContextAsync();
+    await db.Database.MigrateAsync();
+}
 
 app.UseMiddleware<AuthMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();

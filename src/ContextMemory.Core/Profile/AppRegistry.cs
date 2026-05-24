@@ -16,6 +16,8 @@ public sealed class AppRegistry : IAppRegistry
     };
 
     private readonly ConcurrentDictionary<string, AppProfile> _apps = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, RegisteredAppRecord> _registrations = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _seededAppIds = new(StringComparer.Ordinal);
     private readonly ContextMemoryOptions _config;
     private readonly string _registeredAppsPath;
 
@@ -28,7 +30,10 @@ public sealed class AppRegistry : IAppRegistry
         Directory.CreateDirectory(_registeredAppsPath);
 
         foreach (var (appId, entry) in _config.Apps)
+        {
             _apps[appId] = CreateProfile(appId, entry.ApiKey, entry);
+            _seededAppIds.Add(appId);
+        }
 
         LoadRegisteredApps();
     }
@@ -42,11 +47,18 @@ public sealed class AppRegistry : IAppRegistry
 
     public IReadOnlyCollection<AppProfile> GetAllApps() => _apps.Values.ToList();
 
-    internal bool Register(AppProfile profile, RegisteredAppRecord record)
+    public bool TryGetRegistration(string appId, out RegisteredAppRecord? record) =>
+        _registrations.TryGetValue(appId, out record);
+
+    public string GetAppSource(string appId) =>
+        _registrations.ContainsKey(appId) ? "registered" : _seededAppIds.Contains(appId) ? "seed" : "unknown";
+
+    public bool Register(AppProfile profile, RegisteredAppRecord record)
     {
         if (!_apps.TryAdd(profile.AppId, profile))
             return false;
 
+        _registrations[profile.AppId] = record;
         var path = Path.Combine(_registeredAppsPath, $"{profile.AppId}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(record, JsonOptions));
         return true;
@@ -71,10 +83,12 @@ public sealed class AppRegistry : IAppRegistry
                 {
                     AppId = record.AppId,
                     ApiKey = record.ApiKey,
-                    WikiPath = ResolveWikiPath(record.WikiPath, record.AppId)
+                    WikiPath = ResolveWikiPath(record.WikiPath, record.AppId),
+                    DefaultLanguage = "pt-PT"
                 };
 
                 _apps[record.AppId] = profile;
+                _registrations[record.AppId] = record;
             }
             catch
             {

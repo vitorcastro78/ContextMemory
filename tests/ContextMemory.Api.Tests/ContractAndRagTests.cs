@@ -123,8 +123,10 @@ public class ContractAndRagTests : IClassFixture<StubOllamaWebApplicationFactory
         var root = doc.RootElement;
 
         Assert.Equal(AppId, root.GetProperty("AppId").GetString());
+        Assert.Equal("seed", root.GetProperty("Source").GetString());
         Assert.Equal("ollama", root.GetProperty("LlmBackend").GetString());
         Assert.Equal($"/apps/{AppId}/wiki", root.GetProperty("WikiUploadEndpoint").GetString());
+        Assert.True(root.TryGetProperty("ActiveUsers", out _));
     }
 
     [Fact]

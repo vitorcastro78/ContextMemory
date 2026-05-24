@@ -140,7 +140,7 @@ public sealed class ContextEngine : IContextEngine
             yield return chunk;
     }
 
-    public Task<ChatPipelineResult> FinalizeStreamAsync(
+    public async Task<ChatPipelineResult> FinalizeStreamAsync(
         string appId,
         string userId,
         OllamaRequest request,
@@ -158,7 +158,19 @@ public sealed class ContextEngine : IContextEngine
             Done = true
         };
 
-        return PostProcessResponseAsync(app, userId, request, response, runtimeConfig, 0, ragHit: false, cancellationToken);
+        var result = await PostProcessResponseAsync(app, userId, request, response, runtimeConfig, 0, ragHit: false, cancellationToken)
+            .ConfigureAwait(false);
+
+        RecordTelemetry(
+            appId,
+            userId,
+            result.StatusCode,
+            0,
+            result.EstimatedPromptTokens,
+            result.EstimatedCompletionTokens,
+            result.RagHit);
+
+        return result;
     }
 
     private async Task<ChatPipelineResult?> RunPrePipelineAsync(

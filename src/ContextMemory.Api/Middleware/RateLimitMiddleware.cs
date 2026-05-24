@@ -41,7 +41,7 @@ public sealed class RateLimitMiddleware
         }
 
         var config = _appConfigStore.GetConfig(appId);
-        var estimatedTokens = 500;
+        var estimatedTokens = EstimateRequestTokens(context);
 
         var result = _rateLimitService.TryAcquire(appId, userId, estimatedTokens, config.RateLimits);
         if (!result.IsAcquired)
@@ -57,5 +57,13 @@ public sealed class RateLimitMiddleware
         }
 
         await _next(context).ConfigureAwait(false);
+    }
+
+    private static int EstimateRequestTokens(HttpContext context)
+    {
+        if (context.Request.ContentLength is > 0 and var length)
+            return (int)Math.Clamp(length / 4, 1, 50_000);
+
+        return 500;
     }
 }

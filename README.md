@@ -1,6 +1,6 @@
 # ContextMemory Middleware
 
-**ContextMemory** is a transparent memory and context middleware for LLM applications. It sits between your clients and any compatible LLM backend (Ollama, LM Studio, OpenAI API), enriches the `messages` array with conversation history, domain knowledge, user profiles, and safety rules, and forwards the request unchanged in shape to the real model.
+**ContextMemory** is a transparent memory and context middleware for LLM applications. It sits between your clients and any compatible LLM backend (**Ollama** is the primary default; LM Studio and OpenAI API are also supported), enriches the `messages` array with conversation history, domain knowledge, user profiles, and safety rules, and forwards the request unchanged in shape to the real model.
 
 Clients keep using the **native Ollama chat API** (`POST /api/chat`). They never need to know that a middleware exists.
 
@@ -39,7 +39,7 @@ Clients keep using the **native Ollama chat API** (`POST /api/chat`). They never
               ┌──────────────┼──────────────┐
               ▼              ▼              ▼
          Ollama         LM Studio        OpenAI API
-      (default)      (OpenAI-compatible)  (cloud)
+      (primary)      (OpenAI-compat)    (cloud)
 ```
 
 ### Multi-tenant model
@@ -47,7 +47,7 @@ Clients keep using the **native Ollama chat API** (`POST /api/chat`). They never
 - **`appId`** — A registered application (e.g. `helpdesk-prod-a1b2c3`). Each app has its own API key, wiki, prompt config, rate limits, and content rules.
 - **`userId`** — End user within that app. Memory and profiles are never shared across users or apps.
 
-The sample `kyc-dev` entry in `appsettings.json` is only a **local development seed** from the project blueprint. Production apps should be registered via `POST /apps/register` or listed under `ContextMemory:Apps`.
+The sample `kyc-dev` entry in `appsettings.json` is a **local development seed** from the project blueprint. Production apps should be registered via `POST /apps/register` or listed under `ContextMemory:Apps`.
 
 ---
 
@@ -58,7 +58,7 @@ The sample `kyc-dev` entry in `appsettings.json` is only a **local development s
 - `POST /api/chat` — Full Ollama request/response contract; supports streaming (NDJSON) and non-streaming JSON
 - `POST /api/generate` — Ollama generate API pass-through (no conversation enrichment); streaming supported
 - Only `messages[]` is modified; model metrics and response fields are preserved and piped through
-- Pluggable LLM backends per app: `ollama` | `lmstudio` | `openai`
+- Pluggable LLM backends per app: `ollama` (primary) · `lmstudio` · `openai`
 
 ### Conversation & memory
 
@@ -135,8 +135,77 @@ Config lives in `data/app-profiles/{appId}/` (`persona.md`, `business-rules.md`,
 ## Requirements
 
 - [.NET 9 SDK](https://dotnet.microsoft.com/download)
-- An LLM backend (typically [Ollama](https://ollama.com)) **or** LM Studio / OpenAI
+- An LLM backend — **[Ollama](https://ollama.com)** recommended as primary; LM Studio and OpenAI optional per app
 - Optional: ONNX embedding model for RAG (see [Embeddings setup](#embeddings-setup))
+
+---
+
+## Local evaluation (no Docker)
+
+This is the recommended path to validate the middleware before any container deployment.
+
+| Component | Local setup |
+|-----------|-------------|
+| **ContextMemory** | `dotnet run` from `src/ContextMemory.Api` → `http://localhost:5100` |
+| **Ollama** | Primary backend; default `http://localhost:11434` |
+| **LM Studio / OpenAI** | Optional; configure per app via `llmBackend` when needed |
+| **Persistence** | **PostgreSQL** (`PersistenceProvider: Postgres`) or local JSON files (`File`) |
+| **Vector cache / wikis** | Still on disk (`data/vector-cache`, `wikis/`) |
+| **RAG embeddings** | Optional ONNX model via `./scripts/download-embedding-model.ps1` |
+
+**Typical flow on Windows (isolated local machine):**
+
+```powershell
+# 1. Ollama (separate terminal or Windows service)
+ollama serve          # if not already running
+ollama pull llama3.2  # or your chosen model
+
+# 2. Embeddings for wiki RAG (once)
+./scripts/download-embedding-model.ps1
+
+# 3. API
+cd src/ContextMemory.Api
+dotnet run
+# → http://localhost:5100
+
+# 4. Smoke test
+curl http://localhost:5100/health
+```
+
+Use the `kyc-dev` seed app and wiki under `wikis/kyc/` (configured in `appsettings.json`). Register new apps via `POST /apps/register` when you outgrow the seed.
+
+Copy `.env.example` to `.env` only if you prefer environment variables over JSON config.
+
+### PostgreSQL (local)
+
+1. Create the database:
+
+```sql
+CREATE DATABASE contextmemory;
+```
+
+2. Set the connection string in `appsettings.json`:
+
+```json
+{
+  "ConnectionStrings": {
+    "ContextMemory": "Host=localhost;Port=5432;Database=contextmemory;Username=postgres;Password=YOUR_PASSWORD"
+  },
+  "ContextMemory": {
+    "PersistenceProvider": "Postgres",
+    ...
+  }
+}
+```
+
+3. Run the API — migrations apply automatically on startup (`Database.Migrate`).
+
+| `PersistenceProvider` | Behaviour |
+|----------------------|-----------|
+| `Postgres` | Conversation history, profiles, semantic facts, feedback, audit, app config in PostgreSQL |
+| `File` | Legacy JSON/MemoryPack under `data/` (used in tests) |
+
+Wikis and vector cache remain on disk in both modes.
 
 ---
 
@@ -152,21 +221,29 @@ dotnet build
 
 ### 2. Configure (optional seed app)
 
-Edit `src/ContextMemory.Api/appsettings.json` or use environment variables. Minimal platform settings:
+Copy `.env.example` to `.env` only if you prefer environment variables over `appsettings.json`.
+
+All platform settings live in `src/ContextMemory.Api/appsettings.json`:
 
 ```json
 {
   "ContextMemory": {
-    "DataPath": "./data",
-    "WikiPath": "./wikis",
+    "DataPath": "../../data",
+    "WikiPath": "../../wikis",
     "OllamaEndpoint": "http://localhost:11434",
     "MasterKey": "change-me-in-production",
-    "Apps": {}
+    "Apps": {
+      "kyc-dev": { }
+    },
+    "Embeddings": {
+      "ModelPath": "../ContextMemory.Embeddings/models/model.onnx",
+      "VocabPath": "../ContextMemory.Embeddings/models/vocab.txt"
+    }
   }
 }
 ```
 
-Leave `Apps` empty and register apps via API (recommended for production).
+Paths are relative to `src/ContextMemory.Api` when you run `dotnet run` from that folder.
 
 ### 3. Run the API
 
@@ -175,12 +252,12 @@ cd src/ContextMemory.Api
 dotnet run
 ```
 
-Default URL: `http://localhost:5000` or `https://localhost:5001` (see console output).
+Default URL: `http://localhost:5100` (see `launchSettings.json` and console output).
 
 ### 4. Register an application
 
 ```bash
-curl -X POST http://localhost:5000/apps/register \
+curl -X POST http://localhost:5100/apps/register \
   -H "Authorization: Bearer change-me-in-production" \
   -H "Content-Type: application/json" \
   -d '{
@@ -197,7 +274,7 @@ Response includes `appId`, `apiKey`, and `wikiUploadEndpoint`. Store the API key
 ### 5. Chat (drop-in Ollama client)
 
 ```bash
-curl -X POST http://localhost:5000/api/chat \
+curl -X POST http://localhost:5100/api/chat \
   -H "X-App-Id: helpdesk-prod-abc123" \
   -H "X-User-Id: user-42" \
   -H "Authorization: Bearer cm_live_..." \
@@ -247,9 +324,11 @@ All settings use the `ContextMemory` section (or `ContextMemory__*` env vars).
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `DataPath` | `./data` | Persistence root (history, profiles, feedback, audit) |
+| `ConnectionStrings:ContextMemory` | *(see appsettings)* | PostgreSQL when `PersistenceProvider` is `Postgres` |
+| `PersistenceProvider` | `Postgres` | `Postgres` or `File` |
+| `DataPath` | `./data` | Persistence root (vector cache, wikis path resolution) |
 | `WikiPath` | `./wikis` | Default wiki root for new apps |
-| `OllamaEndpoint` | `http://localhost:11434` | Ollama base URL |
+| `OllamaEndpoint` | `http://localhost:11434` | Ollama base URL (primary backend) |
 | `LmStudioEndpoint` | `http://localhost:1234` | LM Studio OpenAI-compatible URL |
 | `OpenAiEndpoint` | `https://api.openai.com` | OpenAI API base |
 | `OpenAiApiKey` | *(empty)* | Used only when an app sets `llmBackend: openai` |
@@ -329,7 +408,7 @@ File: `data/app-profiles/{appId}/content-rules.json`
 ### Feedback example
 
 ```bash
-curl -X POST http://localhost:5000/api/chat/feedback \
+curl -X POST http://localhost:5100/api/chat/feedback \
   -H "X-App-Id: helpdesk-prod-abc123" \
   -H "X-User-Id: user-42" \
   -H "Authorization: Bearer cm_live_..." \
@@ -340,7 +419,7 @@ curl -X POST http://localhost:5000/api/chat/feedback \
 ### Wiki upload example
 
 ```bash
-curl -X POST http://localhost:5000/apps/helpdesk-prod-abc123/wiki \
+curl -X POST http://localhost:5100/apps/helpdesk-prod-abc123/wiki \
   -H "X-App-Id: helpdesk-prod-abc123" \
   -H "Authorization: Bearer cm_live_..." \
   -F "files=@./docs/faq.md"
@@ -356,7 +435,7 @@ RAG requires a local ONNX model and vocabulary:
 ./scripts/download-embedding-model.ps1
 ```
 
-Paths are configured under `ContextMemory:Embeddings` in `appsettings.json`. If the model is missing, the API starts but RAG is disabled until files are present.
+Paths are configured under `ContextMemory:Embeddings` in `appsettings.json` (nested `"Embeddings"` object). If the model is missing, the API starts but RAG is disabled until files are present.
 
 ---
 
@@ -366,7 +445,7 @@ Point any Ollama-compatible client at ContextMemory instead of Ollama:
 
 | Ollama direct | ContextMemory |
 |---------------|---------------|
-| `http://localhost:11434/api/chat` | `http://localhost:5000/api/chat` |
+| `http://localhost:11434/api/chat` | `http://localhost:5100/api/chat` |
 | *(none)* | `X-App-Id`, `X-User-Id`, `Authorization` |
 
 **Python (ollama library style via HTTP):**
@@ -375,7 +454,7 @@ Point any Ollama-compatible client at ContextMemory instead of Ollama:
 import requests
 
 resp = requests.post(
-    "http://localhost:5000/api/chat",
+    "http://localhost:5100/api/chat",
     headers={
         "X-App-Id": "myapp-prod-xyz",
         "X-User-Id": "user-1",
@@ -471,7 +550,7 @@ cd src/ContextMemory.Api
 dotnet watch run
 ```
 
-`appsettings.Development.json` overrides paths (e.g. `DataPath: ../../data`) for local runs from the Api project folder.
+`appsettings.json` uses paths like `../../data` so data and wikis resolve to the repository root when running from `src/ContextMemory.Api`.
 
 ---
 
@@ -491,11 +570,11 @@ Set `llmBackend` in the app’s `config.json` (or at registration):
 
 | Value | When to use |
 |-------|-------------|
-| `ollama` | Local models (default) |
+| `ollama` | Local models — **primary / default** |
 | `lmstudio` | LM Studio OpenAI-compatible server |
 | `openai` | OpenAI or compatible cloud API; set `OpenAiApiKey` at platform level |
 
-Each app can use a different backend. Platform endpoints in `appsettings.json` are **connection settings**, not a mandate to use every provider.
+Each app can use a different backend. Platform endpoints in `appsettings.json` are connection settings; use **Ollama** for the current local evaluation unless you explicitly configure another backend.
 
 ---
 

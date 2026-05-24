@@ -1,8 +1,10 @@
 using System.Diagnostics;
 using System.Text.Json;
 using ContextMemory.Api.Middleware;
+using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
+using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Api.Endpoints;
 
@@ -25,12 +27,17 @@ public static class GenerateEndpoint
         IAppRegistry appRegistry,
         IAppConfigStore appConfigStore,
         ILlmAdapterResolver adapterResolver,
+        IContentFilter contentFilter,
+        IContentRulesStore contentRulesStore,
+        IAuditLog auditLog,
         ITelemetryCollector telemetry,
+        IOptions<ContextMemoryOptions> options,
         CancellationToken cancellationToken)
     {
         var appId = (string)httpContext.Items[AuthMiddleware.AppIdItemKey]!;
         var userId = (string)httpContext.Items[AuthMiddleware.UserIdItemKey]!;
         var sw = Stopwatch.StartNew();
+        var contentFilterEnabled = options.Value.EnableContentFilter;
 
         if (!appRegistry.TryGetApp(appId, out _))
         {
@@ -41,7 +48,37 @@ public static class GenerateEndpoint
         }
 
         var runtimeConfig = appConfigStore.GetConfig(appId);
+        var prompt = request.Prompt;
+
+        if (contentFilterEnabled)
+        {
+            var rules = contentRulesStore.GetRules(appId);
+            var pre = contentFilter.FilterPre(appId, userId, prompt, rules);
+            if (pre.IsBlocked)
+            {
+                await auditLog.AppendAsync(new AuditLogEntry
+                {
+                    AppId = appId,
+                    UserId = userId,
+                    Phase = "pre",
+                    Reason = pre.AuditReason,
+                    Timestamp = DateTimeOffset.UtcNow
+                }, cancellationToken).ConfigureAwait(false);
+
+                telemetry.RecordContentFiltered(appId, pre.AuditReason);
+                httpContext.Response.StatusCode = StatusCodes.Status400BadRequest;
+                await httpContext.Response
+                    .WriteAsJsonAsync(new { error = pre.BlockReason }, cancellationToken)
+                    .ConfigureAwait(false);
+                RecordGenerateTelemetry(telemetry, appId, userId, sw, prompt, null, StatusCodes.Status400BadRequest);
+                return;
+            }
+
+            prompt = pre.ModifiedContent ?? prompt;
+        }
+
         var adapter = adapterResolver.Resolve(runtimeConfig.LlmBackend);
+        var generateRequest = request with { Prompt = prompt };
         var isStreaming = request.Stream ?? false;
 
         try
@@ -49,16 +86,30 @@ public static class GenerateEndpoint
             if (!isStreaming)
             {
                 var response = await adapter
-                    .GenerateAsync(request, cancellationToken)
+                    .GenerateAsync(generateRequest, cancellationToken)
                     .ConfigureAwait(false);
+
+                var output = await ApplyPostFilterAsync(
+                    contentFilterEnabled,
+                    contentFilter,
+                    contentRulesStore,
+                    auditLog,
+                    telemetry,
+                    appId,
+                    userId,
+                    response.Response ?? string.Empty,
+                    runtimeConfig.DefaultLanguage,
+                    cancellationToken).ConfigureAwait(false);
+
+                var finalResponse = response with { Response = output };
 
                 httpContext.Response.StatusCode = StatusCodes.Status200OK;
                 httpContext.Response.ContentType = "application/json";
                 await httpContext.Response
-                    .WriteAsJsonAsync(response, JsonOptions, cancellationToken)
+                    .WriteAsJsonAsync(finalResponse, JsonOptions, cancellationToken)
                     .ConfigureAwait(false);
 
-                RecordGenerateTelemetry(telemetry, appId, userId, sw, request.Prompt, response.Response, StatusCodes.Status200OK);
+                RecordGenerateTelemetry(telemetry, appId, userId, sw, prompt, output, StatusCodes.Status200OK);
                 return;
             }
 
@@ -67,7 +118,7 @@ public static class GenerateEndpoint
 
             var generated = new System.Text.StringBuilder();
             await foreach (var chunk in adapter
-                .GenerateStreamAsync(request, cancellationToken)
+                .GenerateStreamAsync(generateRequest, cancellationToken)
                 .ConfigureAwait(false))
             {
                 if (chunk.Response is { Length: > 0 } part)
@@ -78,11 +129,27 @@ public static class GenerateEndpoint
                 await httpContext.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
             }
 
-            RecordGenerateTelemetry(telemetry, appId, userId, sw, request.Prompt, generated.ToString(), StatusCodes.Status200OK);
+            var streamedOutput = generated.ToString();
+            if (contentFilterEnabled && streamedOutput.Length > 0)
+            {
+                streamedOutput = await ApplyPostFilterAsync(
+                    true,
+                    contentFilter,
+                    contentRulesStore,
+                    auditLog,
+                    telemetry,
+                    appId,
+                    userId,
+                    streamedOutput,
+                    runtimeConfig.DefaultLanguage,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            RecordGenerateTelemetry(telemetry, appId, userId, sw, prompt, streamedOutput, StatusCodes.Status200OK);
         }
         catch (HttpRequestException ex) when (ex.StatusCode.HasValue)
         {
-            RecordGenerateTelemetry(telemetry, appId, userId, sw, request.Prompt, null, (int)ex.StatusCode.Value);
+            RecordGenerateTelemetry(telemetry, appId, userId, sw, prompt, null, (int)ex.StatusCode.Value);
             httpContext.Response.StatusCode = (int)ex.StatusCode.Value;
             if (!string.IsNullOrEmpty(ex.Message))
             {
@@ -90,6 +157,39 @@ public static class GenerateEndpoint
                 await httpContext.Response.WriteAsync(ex.Message, cancellationToken).ConfigureAwait(false);
             }
         }
+    }
+
+    private static async Task<string> ApplyPostFilterAsync(
+        bool enabled,
+        IContentFilter contentFilter,
+        IContentRulesStore contentRulesStore,
+        IAuditLog auditLog,
+        ITelemetryCollector telemetry,
+        string appId,
+        string userId,
+        string content,
+        string defaultLanguage,
+        CancellationToken cancellationToken)
+    {
+        if (!enabled || string.IsNullOrEmpty(content))
+            return content;
+
+        var rules = contentRulesStore.GetRules(appId);
+        var post = contentFilter.FilterPost(appId, userId, content, rules, defaultLanguage);
+        if (!string.IsNullOrEmpty(post.AuditReason))
+        {
+            await auditLog.AppendAsync(new AuditLogEntry
+            {
+                AppId = appId,
+                UserId = userId,
+                Phase = "post",
+                Reason = post.AuditReason,
+                Timestamp = DateTimeOffset.UtcNow
+            }, cancellationToken).ConfigureAwait(false);
+            telemetry.RecordContentFiltered(appId, post.AuditReason);
+        }
+
+        return post.ModifiedContent ?? content;
     }
 
     private static void RecordGenerateTelemetry(

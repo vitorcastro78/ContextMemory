@@ -6,4 +6,5 @@ public interface IContentRulesStore
 {
     ContentRules GetRules(string appId);
     void Reload(string appId);
+    void EnsureDefaultRules(string appId);
 }

@@ -26,11 +26,12 @@ public sealed class StubOllamaWebApplicationFactory : WebApplicationFactory<Prog
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
+        builder.UseEnvironment("Testing");
         builder.ConfigureAppConfiguration((_, config) =>
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["ContextMemory:PersistenceProvider"] = "File",
                 ["ContextMemory:DataPath"] = _dataRoot,
                 ["ContextMemory:WikiPath"] = _dataRoot,
                 ["ContextMemory:OllamaEndpoint"] = "http://ollama-stub",
@@ -39,7 +40,8 @@ public sealed class StubOllamaWebApplicationFactory : WebApplicationFactory<Prog
                 ["ContextMemory:Apps:demo-app:ApiKey"] = "test-api-key",
                 ["ContextMemory:Apps:demo-app:SystemPrompt"] = "Test persona",
                 ["ContextMemory:Apps:demo-app:DefaultLanguage"] = "en-US",
-                ["ContextMemory:Apps:demo-app:WikiPath"] = DemoWikiPath
+                ["ContextMemory:Apps:demo-app:WikiPath"] = DemoWikiPath,
+                ["ContextMemory:Apps:demo-app:DefaultLanguage"] = "en-US"
             });
         });
 

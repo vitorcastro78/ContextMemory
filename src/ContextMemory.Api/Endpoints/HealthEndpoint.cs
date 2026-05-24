@@ -1,5 +1,6 @@
-using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Configuration;
+using ContextMemory.Core.Contracts;
+using ContextMemory.Core.Persistence;
 using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Api.Endpoints;
@@ -12,15 +13,37 @@ public static class HealthEndpoint
     }
 
     private static async Task<IResult> GetHealthAsync(
+        HttpContext httpContext,
         ILlmAdapterResolver adapterResolver,
         IAppRegistry appRegistry,
+        IAppConfigStore appConfigStore,
+        IEmbeddingEngine embeddingEngine,
         IOptions<ContextMemoryOptions> options)
     {
         var config = options.Value;
+        var usePostgres = PersistenceProviders.IsPostgres(config.PersistenceProvider);
+
         var ollamaHealthy = await adapterResolver.Resolve("ollama").IsHealthyAsync().ConfigureAwait(false);
         var appsLoaded = appRegistry.GetAllApps().Count > 0;
+        var embeddingsReady = embeddingEngine.IsAvailable;
 
-        var status = ollamaHealthy && appsLoaded ? "healthy" : "degraded";
+        bool profilesReady;
+        string? database = null;
+
+        if (usePostgres)
+        {
+            var pgHealth = httpContext.RequestServices.GetService<IPostgresHealthCheck>();
+            var dbUp = pgHealth is not null && await pgHealth.CanConnectAsync().ConfigureAwait(false);
+            database = dbUp ? "up" : "down";
+            profilesReady = dbUp && appsLoaded;
+        }
+        else
+        {
+            profilesReady = Directory.Exists(appConfigStore.ProfilesRoot);
+        }
+
+        var healthy = ollamaHealthy && appsLoaded && profilesReady;
+        var status = healthy ? "healthy" : "degraded";
         var code = ollamaHealthy ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable;
 
         return Results.Json(new
@@ -29,7 +52,11 @@ public static class HealthEndpoint
             checks = new
             {
                 ollama = ollamaHealthy ? "up" : "down",
+                database,
+                persistence = config.PersistenceProvider,
                 appsLoaded,
+                profilesReady,
+                embeddings = embeddingsReady ? "up" : "unavailable",
                 dataPath = config.DataPath
             }
         }, statusCode: code);

@@ -8,7 +8,7 @@ public sealed class OllamaE2EWebApplicationFactory : WebApplicationFactory<Progr
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
+        builder.UseEnvironment("Testing");
         var ollamaUrl = Environment.GetEnvironmentVariable("OLLAMA_E2E_URL")
             ?? "http://localhost:11434";
 
@@ -16,6 +16,7 @@ public sealed class OllamaE2EWebApplicationFactory : WebApplicationFactory<Progr
         {
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
+                ["ContextMemory:PersistenceProvider"] = "File",
                 ["ContextMemory:OllamaEndpoint"] = ollamaUrl,
                 ["ContextMemory:DataPath"] = Path.Combine(Path.GetTempPath(), "cm-ollama-e2e", Guid.NewGuid().ToString("N")),
                 ["ContextMemory:MasterKey"] = "test-master-key",
