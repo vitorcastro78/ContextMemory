@@ -78,10 +78,22 @@ public static class ChatEndpoint
                 .ConfigureAwait(false);
 
             if (final.MessageId is not null)
-                httpContext.Response.Headers["X-Context-Memory-Message-Id"] = final.MessageId;
+            {
+                var trailer = new OllamaResponse
+                {
+                    Done = true,
+                    ContextMemory = new ContextMemoryMetadata { MessageId = final.MessageId }
+                };
+                var trailerLine = JsonSerializer.Serialize(trailer, JsonOptions);
+                await httpContext.Response.WriteAsync(trailerLine + "\n", cancellationToken).ConfigureAwait(false);
+                await httpContext.Response.Body.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
         catch (HttpRequestException ex) when (ex.StatusCode.HasValue)
         {
+            if (httpContext.Response.HasStarted)
+                throw;
+
             httpContext.Response.StatusCode = (int)ex.StatusCode.Value;
             if (!string.IsNullOrEmpty(ex.Message))
             {

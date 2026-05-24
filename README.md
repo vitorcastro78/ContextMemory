@@ -123,6 +123,17 @@ Config lives in `data/app-profiles/{appId}/` (`persona.md`, `business-rules.md`,
 | `PATCH /admin/apps/{appId}/config` | Master key | Runtime config patch |
 | `GET /admin/apps/{appId}/audit` | Master key | Filtered content audit entries |
 
+### Blazor Admin applications
+
+The repository now includes a full Blazor admin UI:
+
+- `src/ContextMemory.Admin.Web` — cloud/web host (AdminLTE 3 layout)
+- `src/ContextMemory.Admin.Web.Client` — WebAssembly runtime client
+- `src/ContextMemory.Admin.UI` — shared Razor components/pages (apps, users, config, audit)
+- `src/ContextMemory.Admin.Desktop` — Windows-installable MAUI Blazor Hybrid app
+
+The legacy `GET /admin` Alpine dashboard remains available as a fallback.
+
 ### Rate limiting
 
 - Per `appId`: requests/minute + tokens/minute (sliding window + token bucket)
@@ -175,6 +186,18 @@ curl http://localhost:5100/health
 Use the `kyc-dev` seed app and wiki under `wikis/kyc/` (configured in `appsettings.json`). Register new apps via `POST /apps/register` when you outgrow the seed.
 
 Copy `.env.example` to `.env` only if you prefer environment variables over JSON config.
+
+### Run API + Admin Web together with Aspire
+
+```bash
+dotnet run --project src/ContextMemory.AppHost
+```
+
+This starts:
+
+- `ContextMemory.Api` on `http://localhost:5100`
+- `ContextMemory.Admin.Web` on `http://localhost:5200`
+- Aspire dashboard for logs/traces/resource health
 
 ### PostgreSQL (local)
 
@@ -312,6 +335,7 @@ docker compose up --build
 | Service | URL |
 |---------|-----|
 | ContextMemory | http://localhost:5100 |
+| Admin Web | http://localhost:5200 |
 | Ollama | http://localhost:11434 |
 
 Data and wikis are mounted from `./data` and `./wikis`. Override settings with environment variables, e.g. `ContextMemory__MasterKey`, `ContextMemory__OllamaEndpoint`.
@@ -341,6 +365,7 @@ All settings use the `ContextMemory` section (or `ContextMemory__*` env vars).
 | `EnableMetrics` | `true` | Telemetry collector |
 | `DefaultRateLimitRpm` | `60` | Default requests/minute per app |
 | `DefaultRateLimitTpm` | `100000` | Default tokens/minute per app |
+| `AdminCorsOrigins` | `["http://localhost:5200"]` | Allowed origins for Blazor admin web |
 | `Apps` | `{}` | Optional static app seeds (`appId` → apiKey, systemPrompt, wikiPath, …) |
 
 ### Per-app runtime config

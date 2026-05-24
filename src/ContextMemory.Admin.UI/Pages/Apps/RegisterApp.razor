@@ -1,0 +1,182 @@
+@page "/apps/new"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+
+<PageTitle>Nova aplicação - ContextMemory Admin</PageTitle>
+
+<div class="row">
+    <div class="col-lg-8">
+        @if (_created is null)
+        {
+            <div class="card card-outline card-primary">
+                <div class="card-header">
+                    <h3 class="card-title">Registar nova aplicação</h3>
+                </div>
+                <div class="card-body">
+                    @if (!Session.IsConfigured)
+                    {
+                        <div class="alert alert-warning">
+                            Configure a API URL e a master key em <NavLink href="/settings">Settings</NavLink>.
+                        </div>
+                    }
+                    else
+                    {
+                        <EditForm Model="_form" OnValidSubmit="CreateAsync">
+                            <DataAnnotationsValidator />
+
+                            <div class="form-group">
+                                <label>Nome da aplicação</label>
+                                <InputText class="form-control" @bind-Value="_form.AppName" placeholder="Helpdesk Produção" />
+                                <ValidationMessage For="@(() => _form.AppName)" />
+                            </div>
+
+                            <div class="form-group">
+                                <label>Domínio (prefixo do App ID)</label>
+                                <InputText class="form-control" @bind-Value="_form.Domain" placeholder="helpdesk" />
+                                <small class="form-text text-muted">
+                                    Gera um ID como <code>helpdesk-prod-a1b2c3</code>. Apenas letras, números e hífen.
+                                </small>
+                                <ValidationMessage For="@(() => _form.Domain)" />
+                            </div>
+
+                            <div class="row">
+                                <div class="col-md-6 form-group">
+                                    <label>Idioma predefinido</label>
+                                    <InputText class="form-control" @bind-Value="_form.DefaultLanguage" />
+                                </div>
+                                <div class="col-md-6 form-group">
+                                    <label>Backend LLM</label>
+                                    <InputSelect class="form-control" @bind-Value="_form.LlmBackend">
+                                        <option value="ollama">ollama</option>
+                                        <option value="lmstudio">lmstudio</option>
+                                        <option value="openai">openai</option>
+                                    </InputSelect>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Modelo LLM</label>
+                                <InputText class="form-control" @bind-Value="_form.LlmModel" placeholder="llama3.2" />
+                            </div>
+
+                            <div class="form-group">
+                                <label>Persona (system prompt base)</label>
+                                <InputTextArea class="form-control" rows="4" @bind-Value="_form.PromptPersona"
+                                               placeholder="Opcional. Se vazio, usa persona por domínio (kyc, helpdesk, erp…)." />
+                            </div>
+
+                            <div class="form-group">
+                                <label>Caminho wiki (opcional)</label>
+                                <InputText class="form-control" @bind-Value="_form.WikiPath"
+                                           placeholder="Relativo à API ou absoluto. Vazio = pasta wiki automática." />
+                            </div>
+
+                            @if (_error is not null)
+                            {
+                                <div class="alert alert-danger">@_error</div>
+                            }
+
+                            <button type="submit" class="btn btn-primary" disabled="@_saving">
+                                @(_saving ? "A criar…" : "Criar aplicação")
+                            </button>
+                            <NavLink class="btn btn-outline-secondary ml-2" href="/">Cancelar</NavLink>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="card card-outline card-success">
+                <div class="card-header">
+                    <h3 class="card-title">Aplicação criada</h3>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <strong>Guarde a API key agora.</strong> Não será mostrada novamente neste ecrã.
+                    </div>
+
+                    <dl class="row mb-0">
+                        <dt class="col-sm-3">App ID</dt>
+                        <dd class="col-sm-9"><code>@_created.AppId</code></dd>
+
+                        <dt class="col-sm-3">API key</dt>
+                        <dd class="col-sm-9"><code>@_created.ApiKey</code></dd>
+
+                        <dt class="col-sm-3">Wiki upload</dt>
+                        <dd class="col-sm-9"><code>@_created.WikiUploadEndpoint</code></dd>
+
+                        <dt class="col-sm-3">Estado</dt>
+                        <dd class="col-sm-9">@_created.Status</dd>
+                    </dl>
+                </div>
+                <div class="card-footer">
+                    <NavLink class="btn btn-primary" href="@($"/apps/{_created.AppId}")">Ver estatísticas</NavLink>
+                    <NavLink class="btn btn-outline-secondary ml-2" href="/chat">Abrir Chat Lab</NavLink>
+                    <button type="button" class="btn btn-outline-primary ml-2" @onclick="CreateAnother">Criar outra</button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+    [Inject] private AdminSession Session { get; set; } = default!;
+
+    private RegisterAppForm _form = new();
+    private RegisterAppResponse? _created;
+    private bool _saving;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsConfigured)
+            await Session.InitializeAsync();
+    }
+
+    private async Task CreateAsync()
+    {
+        _saving = true;
+        _error = null;
+        try
+        {
+            _created = await Api.RegisterAppAsync(_form.ToRequest());
+        }
+        catch (AdminApiException ex)
+        {
+            _error = TryFormatApiError(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void CreateAnother()
+    {
+        _created = null;
+        _form = new RegisterAppForm();
+        _error = null;
+    }
+
+    private static string TryFormatApiError(string body)
+    {
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("error", out var err))
+                return err.GetString() ?? body;
+        }
+        catch
+        {
+            // ignore
+        }
+
+        return body;
+    }
+}

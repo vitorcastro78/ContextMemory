@@ -1,0 +1,20 @@
+.content-wrapper {
+    min-height: calc(100vh - 114px) !important;
+}
+
+.brand-link {
+    text-decoration: none;
+}
+
+.nav-sidebar .nav-link.active {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.card-footer .btn {
+    margin-right: .25rem;
+}
+
+pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+}

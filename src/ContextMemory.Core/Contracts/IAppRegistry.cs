@@ -10,4 +10,6 @@ public interface IAppRegistry
     bool TryGetRegistration(string appId, out RegisteredAppRecord? record);
     string GetAppSource(string appId);
     bool Register(AppProfile profile, RegisteredAppRecord record);
+    bool TryGetCredentials(string appId, out AppCredentialsInfo? credentials);
+    bool TryRotateApiKey(string appId, out AppCredentialsInfo? credentials);
 }

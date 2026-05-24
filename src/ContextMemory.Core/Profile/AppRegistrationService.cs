@@ -37,7 +37,7 @@ public sealed class AppRegistrationService : IAppRegistrationService
 
         var suffix = RandomNumberGenerator.GetHexString(6, lowercase: true);
         var appId = $"{request.Domain}-prod-{suffix}";
-        var apiKey = $"cm_live_{RandomNumberGenerator.GetHexString(24, lowercase: true)}";
+        var apiKey = ApiKeyGenerator.CreateLiveKey();
 
         var wikiPath = !string.IsNullOrWhiteSpace(request.WikiPath)
             ? Path.GetFullPath(request.WikiPath, _options.ContentRootPath)

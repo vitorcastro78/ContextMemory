@@ -15,6 +15,8 @@ public static class AdminEndpoint
         app.MapDelete("/admin/apps/{appId}/users/{userId}/memory", DeleteMemory);
         app.MapPatch("/admin/apps/{appId}/config", PatchConfig);
         app.MapGet("/admin/apps/{appId}/audit", GetAudit);
+        app.MapGet("/admin/apps/{appId}/credentials", GetCredentials);
+        app.MapPost("/admin/apps/{appId}/rotate-api-key", RotateApiKey).DisableAntiforgery();
     }
 
     private static IResult ListApps(IAppRegistry registry, ITelemetryCollector telemetry) =>
@@ -71,6 +73,22 @@ public static class AdminEndpoint
     {
         var entries = await auditLog.GetByAppAsync(appId, 200, cancellationToken).ConfigureAwait(false);
         return Results.Json(entries);
+    }
+
+    private static IResult GetCredentials(string appId, IAppRegistry registry)
+    {
+        if (!registry.TryGetCredentials(appId, out var credentials) || credentials is null)
+            return Results.NotFound(new { error = "App not found." });
+
+        return Results.Json(credentials);
+    }
+
+    private static IResult RotateApiKey(string appId, IAppRegistry registry)
+    {
+        if (!registry.TryRotateApiKey(appId, out var credentials) || credentials is null)
+            return Results.NotFound(new { error = "App not found." });
+
+        return Results.Json(credentials);
     }
 
     private static string GetDashboardHtml() => """

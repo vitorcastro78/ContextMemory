@@ -3,6 +3,7 @@ using System.Text.Json;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
+using ContextMemory.Core.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -96,6 +97,63 @@ public sealed class PostgresAppRegistry : IAppRegistry
             RegisteredAt = record.RegisteredAt
         });
         db.SaveChanges();
+        return true;
+    }
+
+    public bool TryGetCredentials(string appId, out AppCredentialsInfo? credentials)
+    {
+        EnsureRegisteredAppsLoaded();
+        if (!_apps.TryGetValue(appId, out var profile) || profile is null)
+        {
+            credentials = null;
+            return false;
+        }
+
+        var source = GetAppSource(appId);
+        credentials = new AppCredentialsInfo
+        {
+            AppId = appId,
+            ApiKey = profile.ApiKey,
+            Source = source,
+            RotationPersists = source == "registered"
+        };
+        return true;
+    }
+
+    public bool TryRotateApiKey(string appId, out AppCredentialsInfo? credentials)
+    {
+        EnsureRegisteredAppsLoaded();
+        if (!_apps.TryGetValue(appId, out var profile) || profile is null)
+        {
+            credentials = null;
+            return false;
+        }
+
+        var newKey = ApiKeyGenerator.CreateLiveKey();
+        _apps[appId] = profile with { ApiKey = newKey };
+
+        var source = GetAppSource(appId);
+        if (_registrations.ContainsKey(appId))
+        {
+            var record = _registrations[appId] with { ApiKey = newKey };
+            _registrations[appId] = record;
+
+            using var db = _dbFactory.CreateDbContext();
+            var entity = db.RegisteredApps.FirstOrDefault(x => x.AppId == appId);
+            if (entity is not null)
+            {
+                entity.ApiKey = newKey;
+                db.SaveChanges();
+            }
+        }
+
+        credentials = new AppCredentialsInfo
+        {
+            AppId = appId,
+            ApiKey = newKey,
+            Source = source,
+            RotationPersists = source == "registered"
+        };
         return true;
     }
 

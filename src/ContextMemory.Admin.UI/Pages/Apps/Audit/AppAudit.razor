@@ -1,0 +1,86 @@
+@page "/apps/{AppId}/audit"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+
+<PageTitle>Audit - ContextMemory Admin</PageTitle>
+
+@if (_loading)
+{
+    <div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Loading audit...</div>
+}
+else if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else if (_entries.Count == 0)
+{
+    <div class="alert alert-info">No audit entries found.</div>
+}
+else
+{
+    <div class="card card-outline card-primary">
+        <div class="card-header"><h3 class="card-title">Audit entries for @AppId</h3></div>
+        <div class="card-body table-responsive p-0">
+            <table class="table table-sm table-hover">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>User</th>
+                        <th>Phase</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var entry in _entries)
+                    {
+                        <tr>
+                            <td>@entry.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td>@entry.UserId</td>
+                            <td>@entry.Phase</td>
+                            <td>@entry.Reason</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string AppId { get; set; } = string.Empty;
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+    [Inject] private AdminSession Session { get; set; } = default!;
+
+    private IReadOnlyList<ContextMemory.Core.Models.AuditLogEntry> _entries = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        if (!Session.IsConfigured)
+            await Session.InitializeAsync();
+
+        if (!Session.IsConfigured)
+        {
+            _error = "Configure settings first.";
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            _entries = await Api.GetAuditAsync(AppId);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

@@ -1,0 +1,108 @@
+@page "/apps/{AppId}/users/{UserId}"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+
+<PageTitle>User Detail - ContextMemory Admin</PageTitle>
+
+@if (_loading)
+{
+    <div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> Loading user...</div>
+}
+else if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else if (_user is not null)
+{
+    <div class="card card-outline card-primary">
+        <div class="card-header"><h3 class="card-title">@UserId</h3></div>
+        <div class="card-body">
+            <p><strong>Conversation messages:</strong> @_user.ConversationMessageCount</p>
+            <p><strong>Has semantic memory:</strong> @(_user.HasSemanticMemory ? "Yes" : "No")</p>
+            <p><strong>Profile:</strong></p>
+            <pre>@_profileJson</pre>
+        </div>
+        <div class="card-footer">
+            <button class="btn btn-danger btn-sm" @onclick="DeleteMemoryAsync" disabled="@_deleting">
+                @(_deleting ? "Deleting..." : "Delete memory (GDPR)")
+            </button>
+            <a class="btn btn-sm btn-outline-secondary ml-2" href="/apps/@AppId/users">Back</a>
+        </div>
+    </div>
+    @if (_message is not null)
+    {
+        <div class="alert alert-success mt-2">@_message</div>
+    }
+}
+
+@code {
+    [Parameter] public string AppId { get; set; } = string.Empty;
+    [Parameter] public string UserId { get; set; } = string.Empty;
+
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+    [Inject] private AdminSession Session { get; set; } = default!;
+
+    private UserAdminDetailDto? _user;
+    private string _profileJson = string.Empty;
+    private bool _loading = true;
+    private bool _deleting;
+    private string? _error;
+    private string? _message;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _message = null;
+
+        if (!Session.IsConfigured)
+            await Session.InitializeAsync();
+
+        if (!Session.IsConfigured)
+        {
+            _error = "Configure settings first.";
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            _user = await Api.GetUserAsync(AppId, UserId);
+            _profileJson = System.Text.Json.JsonSerializer.Serialize(_user?.Profile, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task DeleteMemoryAsync()
+    {
+        _deleting = true;
+        _error = null;
+        _message = null;
+        try
+        {
+            await Api.DeleteUserMemoryAsync(AppId, UserId);
+            _message = "User memory deleted.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _deleting = false;
+        }
+    }
+}

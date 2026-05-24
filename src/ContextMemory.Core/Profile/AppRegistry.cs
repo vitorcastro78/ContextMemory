@@ -3,6 +3,7 @@ using System.Text.Json;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
+using ContextMemory.Core.Security;
 using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Core.Profile;
@@ -61,6 +62,55 @@ public sealed class AppRegistry : IAppRegistry
         _registrations[profile.AppId] = record;
         var path = Path.Combine(_registeredAppsPath, $"{profile.AppId}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(record, JsonOptions));
+        return true;
+    }
+
+    public bool TryGetCredentials(string appId, out AppCredentialsInfo? credentials)
+    {
+        if (!_apps.TryGetValue(appId, out var profile) || profile is null)
+        {
+            credentials = null;
+            return false;
+        }
+
+        var source = GetAppSource(appId);
+        credentials = new AppCredentialsInfo
+        {
+            AppId = appId,
+            ApiKey = profile.ApiKey,
+            Source = source,
+            RotationPersists = source == "registered"
+        };
+        return true;
+    }
+
+    public bool TryRotateApiKey(string appId, out AppCredentialsInfo? credentials)
+    {
+        if (!_apps.TryGetValue(appId, out var profile) || profile is null)
+        {
+            credentials = null;
+            return false;
+        }
+
+        var newKey = ApiKeyGenerator.CreateLiveKey();
+        _apps[appId] = profile with { ApiKey = newKey };
+
+        var source = GetAppSource(appId);
+        if (_registrations.TryGetValue(appId, out var record))
+        {
+            var updatedRecord = record with { ApiKey = newKey };
+            _registrations[appId] = updatedRecord;
+            var path = Path.Combine(_registeredAppsPath, $"{appId}.json");
+            File.WriteAllText(path, JsonSerializer.Serialize(updatedRecord, JsonOptions));
+        }
+
+        credentials = new AppCredentialsInfo
+        {
+            AppId = appId,
+            ApiKey = newKey,
+            Source = source,
+            RotationPersists = source == "registered"
+        };
         return true;
     }
 
