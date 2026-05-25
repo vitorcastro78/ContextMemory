@@ -103,3 +103,85 @@ public sealed class RegisterAppForm
         WikiPath = string.IsNullOrWhiteSpace(WikiPath) ? null : WikiPath.Trim()
     };
 }
+
+public sealed class RegisterCompanyForm
+{
+    [Required(ErrorMessage = "Company ID é obrigatório.")]
+    [RegularExpression(@"^[a-zA-Z0-9-]+$", ErrorMessage = "Use apenas letras, números e hífen.")]
+    [StringLength(64, MinimumLength = 2)]
+    public string CompanyId { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "Nome é obrigatório.")]
+    [StringLength(128, MinimumLength = 2)]
+    public string Name { get; set; } = string.Empty;
+
+    [StringLength(512)]
+    public string Description { get; set; } = string.Empty;
+
+    public RegisterCompanyRequest ToRequest() => new()
+    {
+        CompanyId = CompanyId.Trim().ToLowerInvariant(),
+        Name = Name.Trim(),
+        Description = Description.Trim()
+    };
+}
+
+public sealed class AddKnowledgeSourceForm
+{
+    [Required]
+    [RegularExpression(@"^[a-zA-Z0-9-]+$")]
+    public string SourceId { get; set; } = string.Empty;
+
+    [Required]
+    public string DisplayName { get; set; } = string.Empty;
+
+    public KnowledgeSourceType Type { get; set; } = KnowledgeSourceType.MarkdownWiki;
+
+    [Required]
+    public string PathSetting { get; set; } = string.Empty;
+
+    public string PathPlaceholder => Type switch
+    {
+        KnowledgeSourceType.ProcessJsonFolder => "Caminho pasta JSON",
+        KnowledgeSourceType.Confluence => "baseUrl=...;email=...;apiToken=...;spaceKey=...",
+        KnowledgeSourceType.Slack => "botToken=...;channelIds=C123,C456",
+        KnowledgeSourceType.Zendesk => "subdomain=...;email=...;apiToken=...",
+        KnowledgeSourceType.Notion => "apiToken=...;databaseId=...",
+        KnowledgeSourceType.GitHub => "owner=...;repo=...;path=docs;branch=main;token=...",
+        KnowledgeSourceType.GoogleDrive => "folderId=...;token=...",
+        KnowledgeSourceType.SharePoint => "siteUrl=https://tenant.sharepoint.com/sites/Team;folderPath=/sites/Team/Shared Documents/Runbooks",
+        _ => "Caminho wiki ou pasta"
+    };
+
+    public AddKnowledgeSourceRequest ToRequest(string companyId) => new()
+    {
+        SourceId = SourceId.Trim(),
+        DisplayName = DisplayName.Trim(),
+        Type = Type,
+        Settings = Type switch
+        {
+            KnowledgeSourceType.ProcessJsonFolder => new Dictionary<string, string> { ["folderPath"] = PathSetting.Trim() },
+            KnowledgeSourceType.Confluence => ParseKeyValueSettings(PathSetting),
+            KnowledgeSourceType.Slack => ParseKeyValueSettings(PathSetting),
+            KnowledgeSourceType.Zendesk => ParseKeyValueSettings(PathSetting),
+            KnowledgeSourceType.Notion => ParseKeyValueSettings(PathSetting),
+            KnowledgeSourceType.GitHub => ParseKeyValueSettings(PathSetting),
+            KnowledgeSourceType.GoogleDrive => ParseKeyValueSettings(PathSetting),
+            KnowledgeSourceType.SharePoint => ParseKeyValueSettings(PathSetting),
+            _ => new Dictionary<string, string> { ["wikiPath"] = PathSetting.Trim() }
+        }
+    };
+
+    private static Dictionary<string, string> ParseKeyValueSettings(string raw)
+    {
+        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var part in raw.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var idx = part.IndexOf('=');
+            if (idx <= 0)
+                continue;
+            dict[part[..idx].Trim()] = part[(idx + 1)..].Trim();
+        }
+        return dict;
+    }
+}

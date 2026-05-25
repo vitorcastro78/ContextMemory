@@ -1,0 +1,719 @@
+@page "/companies/{CompanyId}"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+
+<PageTitle>@CompanyId - Company Brain</PageTitle>
+
+@if (_loading)
+{
+    <div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> A carregar…</div>
+}
+else if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else if (_detail is not null)
+{
+    <div class="mb-3">
+        <NavLink href="/companies" class="btn btn-outline-secondary btn-sm">← Empresas</NavLink>
+    </div>
+
+    @if (_sharePointMessage is not null)
+    {
+        <div class="alert alert-success">@_sharePointMessage</div>
+    }
+
+    <div class="row">
+        <div class="col-lg-4">
+            <div class="card card-outline card-info">
+                <div class="card-header"><h3 class="card-title">@_detail.Company.Name</h3></div>
+                <div class="card-body">
+                    <p><code>@_detail.Company.CompanyId</code></p>
+                    @if (!string.IsNullOrWhiteSpace(_detail.Company.Description))
+                    {
+                        <p class="text-muted">@_detail.Company.Description</p>
+                    }
+                    <hr />
+                    <p class="mb-1"><strong>@_processes.Count</strong> processos</p>
+                    <p class="mb-1"><strong>@_sources.Count</strong> fontes</p>
+                    <p class="mb-0"><strong>@_linkedApps.Count</strong> apps ligadas</p>
+                </div>
+                <div class="card-footer d-grid gap-2">
+                    <button class="btn btn-info" @onclick="SyncAsync" disabled="@_syncing">
+                        @(_syncing ? "A sincronizar…" : "Sincronizar fontes")
+                    </button>
+                    @if (_syncResult is not null)
+                    {
+                        <small class="text-muted d-block">
+                            Último sync: @_syncResult.ProcessesUpserted processo(s), @_syncResult.SourcesSynced fonte(s).
+                        </small>
+                        @if (_syncResult.Diff is not null)
+                        {
+                            <small class="text-muted">
+                                Diff: +@_syncResult.Diff.Added.Count · ~@_syncResult.Diff.Updated.Count · -@_syncResult.Diff.Removed.Count
+                            </small>
+                        }
+                        @if (_syncResult.CriticalAlerts.Count > 0)
+                        {
+                            <small class="text-danger d-block">
+                                @(_syncResult.AlertDispatched ? "Alerta enviado" : "Alerta pendente"): @_syncResult.CriticalAlerts.Count processo(s) crítico(s)
+                            </small>
+                        }
+                        @if (_syncResult.DiffDetail is not null && HasDiffDetail(_syncResult.DiffDetail))
+                        {
+                            <button type="button" class="btn btn-link btn-sm p-0 mt-1" @onclick="() => ShowDiff(_syncResult.DiffDetail)">
+                                Ver diff lado a lado
+                            </button>
+                        }
+                    }
+                </div>
+            </div>
+
+            <div class="card card-outline card-secondary mt-3">
+                <div class="card-header"><h3 class="card-title">Integrações</h3></div>
+                <div class="card-body small">
+                    <p><strong>Webhook</strong> — header <code>X-Company-Signature</code></p>
+                    <code class="d-block mb-2 text-break">@_webhookUrl</code>
+                    <p><strong>MCP JSON-RPC</strong> (POST)</p>
+                    <code class="d-block mb-2 text-break">@_mcpUrl</code>
+                    <p><strong>MCP SSE</strong> (Cursor / Claude Desktop)</p>
+                    <code class="d-block mb-2 text-break">@_mcpSseUrl</code>
+                    @if (_webhookSecret is not null)
+                    {
+                        <div class="alert alert-warning py-2 mb-2">
+                            Webhook secret: <code>@MaskSecret(_webhookSecret)</code>
+                            @if (_showWebhookSecret)
+                            {
+                                <span class="d-block mt-1"><code>@_webhookSecret</code></span>
+                            }
+                            <button type="button" class="btn btn-link btn-sm p-0" @onclick="ToggleSecretVisibility">
+                                @(_showWebhookSecret ? "Ocultar" : "Mostrar")
+                            </button>
+                        </div>
+                    }
+                    <button class="btn btn-sm btn-outline-warning me-1" @onclick="RotateWebhookAsync" disabled="@_rotatingWebhook">
+                        @(_rotatingWebhook ? "A gerar…" : "Rotacionar secret")
+                    </button>
+                    <hr />
+                    <p class="mb-1"><strong>Config MCP (SSE)</strong></p>
+                    <pre class="bg-light p-2 small text-break mb-2">@_mcpClientConfig</pre>
+                    <p class="mb-1"><strong>Export estático</strong> (master key):</p>
+                    <ul class="mb-0">
+                        <li class="text-break"><code>@_yamlUrl</code></li>
+                        <li class="text-break"><code>@_mcpExportUrl</code></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card card-outline card-danger mt-3">
+                <div class="card-header"><h3 class="card-title">Alertas críticos</h3></div>
+                <div class="card-body small">
+                    <p class="text-muted mb-2">Webhook outbound quando processos críticos são alterados ou removidos no sync.</p>
+                    <div class="form-group mb-2">
+                        <input class="form-control form-control-sm" placeholder="https://hooks.slack.com/..." @bind="_alertWebhookUrl" />
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" @bind="_alertEnabled" id="alertEnabled" />
+                        <label class="form-check-label" for="alertEnabled">Alertas activos</label>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" @onclick="SaveAlertConfigAsync" disabled="@_savingAlerts">
+                        @(_savingAlerts ? "A guardar…" : "Guardar alertas")
+                    </button>
+                </div>
+            </div>
+
+            @if (_metrics is not null)
+            {
+                <div class="card card-outline card-info mt-3">
+                    <div class="card-header"><h3 class="card-title">Métricas</h3></div>
+                    <div class="card-body small">
+                        <div class="row text-center">
+                            <div class="col-4"><div class="text-muted">Syncs</div><strong>@_metrics.SyncTotal</strong></div>
+                            <div class="col-4"><div class="text-muted">Pesquisas</div><strong>@_metrics.SearchesTotal</strong></div>
+                            <div class="col-4"><div class="text-muted">MCP</div><strong>@_metrics.McpCallsTotal</strong></div>
+                        </div>
+                        <hr class="my-2" />
+                        <div class="text-muted">Pendentes: <strong>@_metrics.PendingApprovals</strong> · Alertas: @_metrics.AlertsTotal · Aprovações: @_metrics.ApprovalsTotal</div>
+                    </div>
+                </div>
+            }
+
+            @if (_syncHistory.Count > 0)
+            {
+                <div class="card card-outline card-warning mt-3">
+                    <div class="card-header"><h3 class="card-title">Histórico de sync</h3></div>
+                    <div class="card-body p-0">
+                        <ul class="list-group list-group-flush small">
+                            @foreach (var entry in _syncHistory.Take(5))
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <div>@entry.SyncedAt.ToString("g")</div>
+                                        <div class="text-muted">
+                                            +@entry.Diff.Added.Count · ~@entry.Diff.Updated.Count · -@entry.Diff.Removed.Count
+                                            · @entry.ProcessesUpserted upsert(s)
+                                            @if (entry.CriticalAlerts.Count > 0)
+                                            {
+                                                <span class="text-danger"> · @entry.CriticalAlerts.Count crítico(s)</span>
+                                            }
+                                        </div>
+                                    </div>
+                                    @if (entry.DiffDetail is not null && HasDiffDetail(entry.DiffDetail))
+                                    {
+                                        <button type="button" class="btn btn-xs btn-outline-primary" @onclick="() => ShowDiff(entry.DiffDetail)">
+                                            Diff
+                                        </button>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card card-outline card-primary mb-3">
+                <div class="card-header"><h3 class="card-title">Apps ligadas</h3></div>
+                <div class="card-body">
+                    @if (_linkedApps.Count == 0)
+                    {
+                        <p class="text-muted mb-2">Nenhuma app ligada.</p>
+                    }
+                    else
+                    {
+                        <ul class="list-group mb-3">
+                            @foreach (var appId in _linkedApps)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <code>@appId</code>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => UnlinkAppAsync(appId)">Desligar</button>
+                                </li>
+                            }
+                        </ul>
+                    }
+
+                    <div class="input-group">
+                        <select class="form-control" @bind="_selectedAppId">
+                            <option value="">— Selecionar app —</option>
+                            @foreach (var app in _availableApps.Where(a => !_linkedApps.Contains(a.AppId)))
+                            {
+                                <option value="@app.AppId">@app.AppId</option>
+                            }
+                        </select>
+                        <button class="btn btn-primary" @onclick="LinkAppAsync" disabled="@string.IsNullOrWhiteSpace(_selectedAppId)">Ligar</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card card-outline card-primary mb-3">
+                <div class="card-header"><h3 class="card-title">Fontes de conhecimento</h3></div>
+                <div class="card-body">
+                    @if (_sources.Count > 0)
+                    {
+                        <table class="table table-sm">
+                            <thead><tr><th>ID</th><th>Nome</th><th>Tipo</th><th>Sync</th><th></th></tr></thead>
+                            <tbody>
+                                @foreach (var source in _sources)
+                                {
+                                    <tr>
+                                        <td><code>@source.SourceId</code></td>
+                                        <td>@source.DisplayName</td>
+                                        <td>@source.Type</td>
+                                        <td>@(source.LastSyncedAt?.ToString("g") ?? "—")</td>
+                                        <td class="text-nowrap">
+                                            @if (source.Type == KnowledgeSourceType.SharePoint)
+                                            {
+                                                @if (IsSharePointConnected(source.SourceId))
+                                                {
+                                                    <span class="badge badge-success mr-1">OAuth</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge badge-secondary mr-1">sem OAuth</span>
+                                                }
+                                                <button type="button" class="btn btn-xs btn-outline-info"
+                                                        @onclick="() => ConnectSharePointAsync(source.SourceId)"
+                                                        disabled="@_connectingSharePoint">
+                                                    @(_connectingSharePoint ? "…" : "Ligar Microsoft")
+                                                </button>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+
+                    <EditForm Model="_sourceForm" OnValidSubmit="AddSourceAsync">
+                        <DataAnnotationsValidator />
+                        <div class="row">
+                            <div class="col-md-3 form-group">
+                                <InputText class="form-control" @bind-Value="_sourceForm.SourceId" placeholder="source-id" />
+                            </div>
+                            <div class="col-md-3 form-group">
+                                <InputText class="form-control" @bind-Value="_sourceForm.DisplayName" placeholder="Nome" />
+                            </div>
+                            <div class="col-md-3 form-group">
+                                <InputSelect class="form-control" @bind-Value="_sourceForm.Type">
+                                    <option value="@KnowledgeSourceType.MarkdownWiki">Markdown wiki</option>
+                                    <option value="@KnowledgeSourceType.ProcessJsonFolder">JSON processes</option>
+                                    <option value="@KnowledgeSourceType.Confluence">Confluence</option>
+                                    <option value="@KnowledgeSourceType.Slack">Slack</option>
+                                    <option value="@KnowledgeSourceType.Zendesk">Zendesk</option>
+                                    <option value="@KnowledgeSourceType.Notion">Notion</option>
+                                    <option value="@KnowledgeSourceType.GitHub">GitHub</option>
+                                    <option value="@KnowledgeSourceType.GoogleDrive">Google Drive</option>
+                                    <option value="@KnowledgeSourceType.SharePoint">SharePoint</option>
+                                </InputSelect>
+                            </div>
+                            <div class="col-md-3 form-group">
+                                <InputText class="form-control" @bind-Value="_sourceForm.PathSetting" placeholder="@_sourceForm.PathPlaceholder" />
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-outline-primary" disabled="@_addingSource">Adicionar fonte</button>
+                    </EditForm>
+                </div>
+            </div>
+
+            @if (_pendingProcesses.Count > 0)
+            {
+                <div class="card card-outline card-warning mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h3 class="card-title mb-0">Aprovação pendente (@_pendingProcesses.Count)</h3>
+                        <button class="btn btn-sm btn-success" @onclick="ApproveAllPendingAsync" disabled="@_approving">
+                            @(_approving ? "A aprovar…" : "Aprovar todos")
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <ul class="list-group list-group-flush">
+                            @foreach (var pending in _pendingProcesses)
+                            {
+                                <li class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>@pending.Title</strong>
+                                        <div class="small text-muted"><code>@pending.ProcessId</code></div>
+                                    </div>
+                                    <button class="btn btn-sm btn-outline-success" @onclick="() => ApproveProcessAsync(pending.ProcessId)">
+                                        Aprovar
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
+
+            <div class="card card-outline card-success">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h3 class="card-title mb-0">Processos (@_processes.Count)</h3>
+                    <div class="input-group input-group-sm" style="max-width: 320px;">
+                        <input class="form-control" placeholder="Pesquisar processos…" @bind="_searchQuery" @bind:event="oninput" />
+                        <button class="btn btn-outline-primary" @onclick="SearchProcessesAsync" disabled="@_searching">
+                            @(_searching ? "…" : "Pesquisar")
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    @if (_searchResults.Count > 0)
+                    {
+                        <p class="px-3 pt-3 small text-muted mb-0">Resultados para «@_lastSearchQuery» (@_searchResults.Count)</p>
+                    }
+                    @if (DisplayedProcesses.Count == 0)
+                    {
+                        <p class="p-3 text-muted mb-0">Sem processos. Adicione fontes e sincronize, ou use ingest via API.</p>
+                    }
+                    else
+                    {
+                        <table class="table table-striped mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Título</th>
+                                    <th>Categoria</th>
+                                    <th>Passos</th>
+                                    <th>Triggers</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var process in DisplayedProcesses)
+                                {
+                                    <tr>
+                                        <td>
+                                            <strong>@process.Title</strong>
+                                            @if (process.IsCritical)
+                                            {
+                                                <span class="badge badge-danger ml-1">crítico</span>
+                                            }
+                                            @if (process.PublishStatus == ProcessPublishStatus.Draft)
+                                            {
+                                                <span class="badge badge-warning ml-1">rascunho</span>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(process.Summary))
+                                            {
+                                                <div class="small text-muted">@process.Summary</div>
+                                            }
+                                        </td>
+                                        <td>@process.Category</td>
+                                        <td>@process.Steps.Count</td>
+                                        <td class="small">@string.Join(", ", process.Triggers.Take(3))</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_selectedDiff is not null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.5);">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Diff de sync</h5>
+                    <button type="button" class="close" @onclick="CloseDiff"><span>&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <SyncDiffViewer Detail="_selectedDiff" />
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDiff">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string CompanyId { get; set; } = string.Empty;
+    [SupplyParameterFromQuery] public string? SharePoint { get; set; }
+    [SupplyParameterFromQuery] public string? SourceId { get; set; }
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+    [Inject] private AdminSession Session { get; set; } = default!;
+    [Inject] private IJSRuntime JsRuntime { get; set; } = default!;
+
+    private CompanyDetailResponse? _detail;
+    private List<CompanyProcess> _processes = [];
+    private List<KnowledgeSource> _sources = [];
+    private List<string> _linkedApps = [];
+    private List<AdminAppListItem> _availableApps = [];
+    private CompanySyncResult? _syncResult;
+    private List<CompanySyncHistoryEntry> _syncHistory = [];
+    private AddKnowledgeSourceForm _sourceForm = new();
+    private string _selectedAppId = string.Empty;
+    private string _yamlUrl = string.Empty;
+    private string _mcpUrl = string.Empty;
+    private string _mcpExportUrl = string.Empty;
+    private string _webhookUrl = string.Empty;
+    private string _mcpSseUrl = string.Empty;
+    private string _mcpClientConfig = string.Empty;
+    private string? _webhookSecret;
+    private string _searchQuery = string.Empty;
+    private string _lastSearchQuery = string.Empty;
+    private List<CompanyProcess> _searchResults = [];
+    private List<CompanyProcess> _pendingProcesses = [];
+    private CompanyBrainMetricsSnapshot? _metrics;
+    private ProcessSyncDiffDetail? _selectedDiff;
+    private readonly Dictionary<string, SharePointOAuthStatus> _sharePointStatus = new(StringComparer.Ordinal);
+    private bool _searching;
+    private bool _approving;
+    private bool _connectingSharePoint;
+    private string? _sharePointMessage;
+    private bool _showWebhookSecret;
+    private bool _loading = true;
+    private bool _syncing;
+    private bool _addingSource;
+    private bool _rotatingWebhook;
+    private bool _savingAlerts;
+    private string _alertWebhookUrl = string.Empty;
+    private bool _alertEnabled = true;
+    private string? _error;
+
+    private IReadOnlyList<CompanyProcess> DisplayedProcesses =>
+        _searchResults.Count > 0 ? _searchResults : _processes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsConfigured)
+            await Session.InitializeAsync();
+
+        if (string.Equals(SharePoint, "connected", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(SourceId))
+        {
+            _sharePointMessage = $"SharePoint ligado à fonte «{SourceId}».";
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!Session.IsConfigured)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        try
+        {
+            _detail = await Api.GetCompanyAsync(CompanyId);
+            if (_detail is null)
+            {
+                _error = "Empresa não encontrada.";
+                return;
+            }
+
+            _processes = (await Api.GetCompanyProcessesAsync(CompanyId)).ToList();
+            _sources = (await Api.GetCompanySourcesAsync(CompanyId)).ToList();
+            _linkedApps = (await Api.GetCompanyLinkedAppsAsync(CompanyId)).ToList();
+            _availableApps = (await Api.GetAppsAsync()).ToList();
+            _yamlUrl = Api.GetCompanySkillsYamlUrl(CompanyId);
+            _mcpExportUrl = Api.GetCompanySkillsMcpUrl(CompanyId);
+            _mcpUrl = Api.GetCompanyMcpUrl(CompanyId);
+            _mcpSseUrl = Api.GetCompanyMcpSseUrl(CompanyId);
+            _mcpClientConfig = Api.GetCompanyMcpClientConfig(CompanyId);
+            _webhookUrl = Api.GetCompanyWebhookUrl(CompanyId);
+            _syncHistory = (await Api.GetCompanySyncHistoryAsync(CompanyId)).ToList();
+            var alertConfig = await Api.GetCompanyAlertConfigAsync(CompanyId);
+            _alertWebhookUrl = alertConfig.OutboundWebhookUrl ?? string.Empty;
+            _alertEnabled = alertConfig.Enabled;
+            _pendingProcesses = (await Api.GetPendingProcessesAsync(CompanyId)).ToList();
+            _metrics = await Api.GetCompanyMetricsAsync(CompanyId);
+            await LoadSharePointStatusesAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadSharePointStatusesAsync()
+    {
+        _sharePointStatus.Clear();
+        foreach (var source in _sources.Where(s => s.Type == KnowledgeSourceType.SharePoint))
+        {
+            try
+            {
+                var status = await Api.GetSharePointOAuthStatusAsync(CompanyId, source.SourceId);
+                if (status is not null)
+                    _sharePointStatus[source.SourceId] = status;
+            }
+            catch
+            {
+                // ignore per-source status errors
+            }
+        }
+    }
+
+    private async Task SyncAsync()
+    {
+        _syncing = true;
+        try
+        {
+            _syncResult = await Api.SyncCompanyAsync(CompanyId);
+            _processes = (await Api.GetCompanyProcessesAsync(CompanyId)).ToList();
+            _sources = (await Api.GetCompanySourcesAsync(CompanyId)).ToList();
+            _syncHistory = (await Api.GetCompanySyncHistoryAsync(CompanyId)).ToList();
+            _pendingProcesses = (await Api.GetPendingProcessesAsync(CompanyId)).ToList();
+            _metrics = await Api.GetCompanyMetricsAsync(CompanyId);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _syncing = false;
+        }
+    }
+
+    private async Task ApproveProcessAsync(string processId)
+    {
+        try
+        {
+            await Api.ApproveProcessAsync(CompanyId, processId);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task ApproveAllPendingAsync()
+    {
+        _approving = true;
+        try
+        {
+            await Api.ApproveAllPendingAsync(CompanyId);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _approving = false;
+        }
+    }
+
+    private async Task LinkAppAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedAppId))
+            return;
+
+        try
+        {
+            await Api.LinkCompanyAppAsync(CompanyId, _selectedAppId);
+            _selectedAppId = string.Empty;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task UnlinkAppAsync(string appId)
+    {
+        try
+        {
+            await Api.UnlinkCompanyAppAsync(CompanyId, appId);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task AddSourceAsync()
+    {
+        _addingSource = true;
+        try
+        {
+            await Api.AddCompanySourceAsync(CompanyId, _sourceForm.ToRequest(CompanyId));
+            _sourceForm = new AddKnowledgeSourceForm();
+            _sources = (await Api.GetCompanySourcesAsync(CompanyId)).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _addingSource = false;
+        }
+    }
+
+    private async Task RotateWebhookAsync()
+    {
+        _rotatingWebhook = true;
+        try
+        {
+            var info = await Api.RotateCompanyWebhookSecretAsync(CompanyId);
+            _webhookSecret = info.WebhookSecret;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _rotatingWebhook = false;
+        }
+    }
+
+    private void ToggleSecretVisibility() => _showWebhookSecret = !_showWebhookSecret;
+
+    private async Task SearchProcessesAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_searchQuery))
+        {
+            _searchResults = [];
+            _lastSearchQuery = string.Empty;
+            return;
+        }
+
+        _searching = true;
+        try
+        {
+            _lastSearchQuery = _searchQuery.Trim();
+            _searchResults = (await Api.SearchCompanyProcessesAsync(CompanyId, _lastSearchQuery)).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _searching = false;
+        }
+    }
+
+    private static string MaskSecret(string secret) =>
+        secret.Length <= 8 ? "********" : $"{secret[..4]}…{secret[^4..]}";
+
+    private static bool HasDiffDetail(ProcessSyncDiffDetail detail) =>
+        detail.Added.Count > 0
+        || detail.Updated.Count > 0
+        || detail.Removed.Count > 0
+        || detail.SideBySide.Count > 0;
+
+    private void ShowDiff(ProcessSyncDiffDetail? detail) => _selectedDiff = detail;
+
+    private void CloseDiff() => _selectedDiff = null;
+
+    private bool IsSharePointConnected(string sourceId) =>
+        _sharePointStatus.TryGetValue(sourceId, out var status) && status.Connected;
+
+    private async Task ConnectSharePointAsync(string sourceId)
+    {
+        _connectingSharePoint = true;
+        _error = null;
+        try
+        {
+            var start = await Api.StartSharePointOAuthAsync(CompanyId, sourceId);
+            await JsRuntime.InvokeVoidAsync("open", start.AuthorizationUrl, "_blank");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _connectingSharePoint = false;
+        }
+    }
+
+    private async Task SaveAlertConfigAsync()
+    {
+        _savingAlerts = true;
+        try
+        {
+            await Api.UpdateCompanyAlertConfigAsync(CompanyId, new UpdateCompanyAlertConfigRequest
+            {
+                OutboundWebhookUrl = string.IsNullOrWhiteSpace(_alertWebhookUrl) ? null : _alertWebhookUrl.Trim(),
+                Enabled = _alertEnabled
+            });
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _savingAlerts = false;
+        }
+    }
+}

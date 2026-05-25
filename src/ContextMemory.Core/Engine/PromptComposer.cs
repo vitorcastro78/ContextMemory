@@ -1,4 +1,5 @@
 using System.Text;
+using ContextMemory.Core.CompanyBrain;
 using ContextMemory.Core.Models;
 
 namespace ContextMemory.Core.Engine;
@@ -35,6 +36,14 @@ public sealed class PromptComposer
             sb.AppendLine("[CONHECIMENTO DE DOMÍNIO]");
             foreach (var chunk in ctx.WikiChunks)
                 sb.AppendLine(chunk.Content);
+        }
+
+        if (ctx.ExecutableProcesses.Count > 0)
+        {
+            sb.AppendLine("[PROCESSOS / SKILLS DA EMPRESA]");
+            sb.AppendLine("Segue estes procedimentos quando forem relevantes para a pergunta:");
+            foreach (var process in ctx.ExecutableProcesses)
+                sb.AppendLine(SkillsCompiler.FormatProcessBlock(process));
         }
 
         var sessionContext = ctx.SessionContext ?? ctx.UserProfile.SessionContext;

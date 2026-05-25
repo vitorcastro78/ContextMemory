@@ -1,5 +1,7 @@
 using ContextMemory.Adapters;
 using ContextMemory.Api.Hosting;
+using ContextMemory.Core.CompanyBrain;
+using ContextMemory.Core.CompanyBrain.Connectors;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Engine;
@@ -43,9 +45,38 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IContentRulesStore, ContentRulesStore>();
             services.AddSingleton<IAuditLog, AuditLog>();
             services.AddSingleton<IMemoryAdminService, MemoryAdminService>();
+            services.AddSingleton<ICompanyBrainStore, CompanyBrainStore>();
         }
 
         services.AddSingleton<IAppRegistrationService, AppRegistrationService>();
+        services.AddSingleton<McpSseHub>();
+        services.AddSingleton<CompanyBrainDiskImporter>();
+        services.AddSingleton<ProcessEmbeddingIndex>();
+        services.AddSingleton<ProcessExecutionLogger>();
+        services.AddSingleton<SyncHistoryStore>();
+        services.AddSingleton<CompanyBrainTelemetry>();
+        services.AddSingleton<CompanyAlertConfigStore>();
+        services.AddSingleton<SharePointOAuthStateStore>();
+        services.AddHttpClient(nameof(SharePointOAuthService));
+        services.AddSingleton<SharePointOAuthService>();
+        services.AddHttpClient<SyncAlertDispatcher>();
+        services.AddHttpClient(nameof(ConfluenceWikiConnector));
+        services.AddHttpClient(nameof(SlackHistoryConnector));
+        services.AddHttpClient(nameof(ZendeskHelpCenterConnector));
+        services.AddHttpClient(nameof(NotionDatabaseConnector));
+        services.AddHttpClient(nameof(GitHubMarkdownConnector));
+        services.AddHttpClient(nameof(GoogleDriveFolderConnector));
+        services.AddHttpClient(nameof(SharePointLibraryConnector));
+        services.AddSingleton<IKnowledgeSourceConnector, MarkdownWikiConnector>();
+        services.AddSingleton<IKnowledgeSourceConnector, ProcessJsonFolderConnector>();
+        services.AddSingleton<IKnowledgeSourceConnector, ConfluenceWikiConnector>();
+        services.AddSingleton<IKnowledgeSourceConnector, SlackHistoryConnector>();
+        services.AddSingleton<IKnowledgeSourceConnector, ZendeskHelpCenterConnector>();
+        services.AddSingleton<IKnowledgeSourceConnector, NotionDatabaseConnector>();
+        services.AddSingleton<IKnowledgeSourceConnector, GitHubMarkdownConnector>();
+        services.AddSingleton<IKnowledgeSourceConnector, GoogleDriveFolderConnector>();
+        services.AddSingleton<IKnowledgeSourceConnector, SharePointLibraryConnector>();
+        services.AddSingleton<ICompanyBrainService, CompanyBrainService>();
         services.AddSingleton<IIntentDetector, IntentDetector>();
         services.AddSingleton<IProfileLearner, ProfileLearner>();
         services.AddSingleton<ISessionSummarizer, SessionSummarizer>();
@@ -79,6 +110,7 @@ public static class ServiceCollectionExtensions
         if (!usePostgres)
             services.AddHostedService<AppConfigWatcherHostedService>();
         services.AddHostedService<WikiWatcherHostedService>();
+        services.AddHostedService<CompanyBrainSyncHostedService>();
 
         return services;
     }

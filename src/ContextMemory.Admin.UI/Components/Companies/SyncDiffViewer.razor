@@ -1,0 +1,117 @@
+@if (Detail is null || !HasContent)
+{
+    <p class="text-muted small mb-0">Sem alterações detalhadas.</p>
+}
+else
+{
+    @if (Detail.SideBySide.Count > 0)
+    {
+        <div class="mb-2">
+            @foreach (var entry in Detail.SideBySide)
+            {
+                <div class="card card-outline @CardClass(entry.ChangeType) mb-2">
+                    <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>@entry.Title</strong>
+                            <code class="ml-2 small">@entry.ProcessId</code>
+                            @if (entry.IsCritical)
+                            {
+                                <span class="badge badge-danger ml-1">crítico</span>
+                            }
+                        </div>
+                        <span class="badge @BadgeClass(entry.ChangeType)">@ChangeLabel(entry.ChangeType)</span>
+                    </div>
+                    <div class="card-body p-2">
+                        @if (entry.Changes.Count > 0)
+                        {
+                            <ul class="list-unstyled small mb-2">
+                                @foreach (var change in entry.Changes)
+                                {
+                                    <li class="mb-1">
+                                        <strong>@change.Field:</strong>
+                                        <span class="text-danger">@Truncate(change.Before)</span>
+                                        <span class="text-muted"> → </span>
+                                        <span class="text-success">@Truncate(change.After)</span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        <div class="row">
+                            <div class="col-md-6 mb-2 mb-md-0">
+                                <div class="text-muted small font-weight-bold mb-1">Antes</div>
+                                <pre class="bg-light border rounded p-2 small mb-0 sync-diff-pre">@(string.IsNullOrWhiteSpace(entry.BeforeText) ? "—" : entry.BeforeText)</pre>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="text-muted small font-weight-bold mb-1">Depois</div>
+                                <pre class="bg-light border rounded p-2 small mb-0 sync-diff-pre">@(string.IsNullOrWhiteSpace(entry.AfterText) ? "—" : entry.AfterText)</pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="small">
+            @if (Detail.Added.Count > 0)
+            {
+                <div class="mb-2"><strong class="text-success">Adicionados</strong>
+                    <ul class="mb-0">@foreach (var item in Detail.Added) { <li>@item.Title</li> }</ul>
+                </div>
+            }
+            @if (Detail.Updated.Count > 0)
+            {
+                <div class="mb-2"><strong class="text-primary">Atualizados</strong>
+                    <ul class="mb-0">@foreach (var item in Detail.Updated) { <li>@item.Title</li> }</ul>
+                </div>
+            }
+            @if (Detail.Removed.Count > 0)
+            {
+                <div><strong class="text-danger">Removidos</strong>
+                    <ul class="mb-0">@foreach (var item in Detail.Removed) { <li>@item.Title</li> }</ul>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public ProcessSyncDiffDetail? Detail { get; set; }
+
+    private bool HasContent =>
+        Detail is not null && (
+            Detail.SideBySide.Count > 0
+            || Detail.Added.Count > 0
+            || Detail.Updated.Count > 0
+            || Detail.Removed.Count > 0);
+
+    private static string ChangeLabel(string changeType) => changeType switch
+    {
+        "added" => "Novo",
+        "removed" => "Removido",
+        _ => "Atualizado"
+    };
+
+    private static string CardClass(string changeType) => changeType switch
+    {
+        "added" => "card-success",
+        "removed" => "card-danger",
+        _ => "card-primary"
+    };
+
+    private static string BadgeClass(string changeType) => changeType switch
+    {
+        "added" => "badge-success",
+        "removed" => "badge-danger",
+        _ => "badge-primary"
+    };
+
+    private static string Truncate(string? value, int max = 120)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "—";
+        var trimmed = value.Replace('\n', ' ').Trim();
+        return trimmed.Length <= max ? trimmed : trimmed[..max] + "…";
+    }
+}

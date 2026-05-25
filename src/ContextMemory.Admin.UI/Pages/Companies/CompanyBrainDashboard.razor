@@ -1,0 +1,256 @@
+@page "/companies/dashboard"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+
+<PageTitle>Company Brain Dashboard</PageTitle>
+
+<div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <h4 class="mb-0">Dashboard Company Brain</h4>
+    <div class="d-flex gap-2">
+        <NavLink class="btn btn-outline-secondary btn-sm" href="/companies">Lista de empresas</NavLink>
+        <NavLink class="btn btn-primary btn-sm" href="/companies/new">
+            <i class="fas fa-plus"></i> Nova empresa
+        </NavLink>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> A carregar métricas…</div>
+}
+else if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else if (_dashboard is not null)
+{
+    <div class="row mb-3">
+        <div class="col-6 col-md-4 col-lg-2 mb-2">
+            <div class="small-box bg-info">
+                <div class="inner">
+                    <h3>@_dashboard.CompanyCount</h3>
+                    <p>Empresas</p>
+                </div>
+                <div class="icon"><i class="fas fa-building"></i></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2 mb-2">
+            <div class="small-box bg-primary">
+                <div class="inner">
+                    <h3>@_dashboard.TotalProcesses</h3>
+                    <p>Processos</p>
+                </div>
+                <div class="icon"><i class="fas fa-list-check"></i></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2 mb-2">
+            <div class="small-box @(_dashboard.TotalPendingApprovals > 0 ? "bg-warning" : "bg-secondary")">
+                <div class="inner">
+                    <h3>@_dashboard.TotalPendingApprovals</h3>
+                    <p>Pendentes</p>
+                </div>
+                <div class="icon"><i class="fas fa-clock"></i></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2 mb-2">
+            <div class="small-box bg-success">
+                <div class="inner">
+                    <h3>@_dashboard.TotalSyncs</h3>
+                    <p>Syncs</p>
+                </div>
+                <div class="icon"><i class="fas fa-sync"></i></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2 mb-2">
+            <div class="small-box bg-secondary">
+                <div class="inner">
+                    <h3>@_dashboard.TotalSearches</h3>
+                    <p>Pesquisas</p>
+                </div>
+                <div class="icon"><i class="fas fa-search"></i></div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4 col-lg-2 mb-2">
+            <div class="small-box bg-dark">
+                <div class="inner">
+                    <h3>@_dashboard.TotalMcpCalls</h3>
+                    <p>Chamadas MCP</p>
+                </div>
+                <div class="icon"><i class="fas fa-plug"></i></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-md-3">
+            <div class="info-box">
+                <span class="info-box-icon bg-success"><i class="fas fa-check"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Publicados</span>
+                    <span class="info-box-number">@_dashboard.TotalPublished</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="info-box">
+                <span class="info-box-icon bg-danger"><i class="fas fa-exclamation-triangle"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Críticos</span>
+                    <span class="info-box-number">@_dashboard.TotalCriticalProcesses</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="info-box">
+                <span class="info-box-icon bg-info"><i class="fas fa-database"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Fontes</span>
+                    <span class="info-box-number">@_dashboard.TotalSources</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="info-box">
+                <span class="info-box-icon bg-secondary"><i class="fas fa-link"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Apps ligadas</span>
+                    <span class="info-box-number">@_dashboard.TotalLinkedApps</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (_dashboard.TotalSyncErrors > 0 || _dashboard.TotalAlerts > 0)
+    {
+        <div class="alert alert-warning small mb-3">
+            @if (_dashboard.TotalSyncErrors > 0)
+            {
+                <span>Erros de sync: <strong>@_dashboard.TotalSyncErrors</strong></span>
+            }
+            @if (_dashboard.TotalAlerts > 0)
+            {
+                <span class="ms-3">Alertas enviados: <strong>@_dashboard.TotalAlerts</strong></span>
+            }
+            @if (_dashboard.TotalApprovals > 0)
+            {
+                <span class="ms-3">Aprovações: <strong>@_dashboard.TotalApprovals</strong></span>
+            }
+        </div>
+    }
+
+    @if (_dashboard.Companies.Count == 0)
+    {
+        <div class="alert alert-info">
+            Nenhuma empresa registada. <NavLink href="/companies/new">Criar a primeira</NavLink>.
+        </div>
+    }
+    else
+    {
+        <div class="card card-outline card-primary">
+            <div class="card-header">
+                <h3 class="card-title mb-0">Empresas</h3>
+            </div>
+            <div class="card-body p-0 table-responsive">
+                <table class="table table-hover table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Empresa</th>
+                            <th class="text-end">Processos</th>
+                            <th class="text-end">Pendentes</th>
+                            <th class="text-end">Críticos</th>
+                            <th class="text-end">Fontes</th>
+                            <th class="text-end">Apps</th>
+                            <th class="text-end">Syncs</th>
+                            <th class="text-end">Pesquisas</th>
+                            <th class="text-end">MCP</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _dashboard.Companies)
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@row.Name</strong>
+                                    <div class="small text-muted"><code>@row.CompanyId</code></div>
+                                </td>
+                                <td class="text-end">
+                                    @row.PublishedCount<span class="text-muted">/@row.ProcessCount</span>
+                                </td>
+                                <td class="text-end">
+                                    @if (row.PendingApprovals > 0)
+                                    {
+                                        <span class="badge badge-warning">@row.PendingApprovals</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">0</span>
+                                    }
+                                </td>
+                                <td class="text-end">
+                                    @if (row.CriticalCount > 0)
+                                    {
+                                        <span class="badge badge-danger">@row.CriticalCount</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">0</span>
+                                    }
+                                </td>
+                                <td class="text-end">@row.SourceCount</td>
+                                <td class="text-end">@row.LinkedAppCount</td>
+                                <td class="text-end">@row.Metrics.SyncTotal</td>
+                                <td class="text-end">@row.Metrics.SearchesTotal</td>
+                                <td class="text-end">@row.Metrics.McpCallsTotal</td>
+                                <td class="text-end">
+                                    <NavLink class="btn btn-xs btn-info" href="@($"/companies/{row.CompanyId}")">Gerir</NavLink>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+    [Inject] private AdminSession Session { get; set; } = default!;
+
+    private CompanyBrainGlobalDashboard? _dashboard;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsConfigured)
+            await Session.InitializeAsync();
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!Session.IsConfigured)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        try
+        {
+            _dashboard = await Api.GetGlobalDashboardAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

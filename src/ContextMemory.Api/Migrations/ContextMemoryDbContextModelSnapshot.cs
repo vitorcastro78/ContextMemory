@@ -91,6 +91,140 @@ namespace ContextMemory.Api.Migrations
                     b.ToTable("audit_log", (string)null);
                 });
 
+            modelBuilder.Entity("ContextMemory.Core.Persistence.Postgres.CompanyAppLinkEntity", b =>
+                {
+                    b.Property<string>("CompanyId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AppId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("CompanyId", "AppId");
+
+                    b.HasIndex("AppId")
+                        .IsUnique();
+
+                    b.ToTable("company_app_links", (string)null);
+                });
+
+            modelBuilder.Entity("ContextMemory.Core.Persistence.Postgres.CompanyEntity", b =>
+                {
+                    b.Property<string>("CompanyId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SkillsCacheJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WebhookSecret")
+                        .HasColumnType("text");
+
+                    b.HasKey("CompanyId");
+
+                    b.ToTable("companies", (string)null);
+                });
+
+            modelBuilder.Entity("ContextMemory.Core.Persistence.Postgres.CompanyKnowledgeSourceEntity", b =>
+                {
+                    b.Property<string>("CompanyId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SettingsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("CompanyId", "SourceId");
+
+                    b.ToTable("company_knowledge_sources", (string)null);
+                });
+
+            modelBuilder.Entity("ContextMemory.Core.Persistence.Postgres.CompanyProcessEntity", b =>
+                {
+                    b.Property<string>("CompanyId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProcessId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("GuardrailsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<bool>("IsCritical")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("PublishStatus")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("SourceRef")
+                        .HasColumnType("text");
+
+                    b.Property<string>("StepsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Summary")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("TriggersJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("CompanyId", "ProcessId");
+
+                    b.ToTable("company_processes", (string)null);
+                });
+
             modelBuilder.Entity("ContextMemory.Core.Persistence.Postgres.ConversationHistoryEntity", b =>
                 {
                     b.Property<string>("AppId")

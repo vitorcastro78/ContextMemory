@@ -7,4 +7,5 @@ public record PromptContext
     public IReadOnlyList<WikiChunk> WikiChunks { get; init; } = [];
     public MessageIntent Intent { get; init; } = MessageIntent.General;
     public string? SessionContext { get; init; }
+    public IReadOnlyList<CompanyProcess> ExecutableProcesses { get; init; } = [];
 }

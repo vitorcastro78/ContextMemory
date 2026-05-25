@@ -7,9 +7,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="ContextMemory.Api.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Markdig" Version="0.40.0" />
     <PackageReference Include="MemoryPack" Version="1.21.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.0" />

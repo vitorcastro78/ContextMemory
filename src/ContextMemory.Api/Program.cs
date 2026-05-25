@@ -74,6 +74,7 @@ app.MapAdminEndpoints();
 app.MapAppsConfigEndpoints();
 app.MapAppsRegisterEndpoint();
 app.MapAppsWikiEndpoint();
+app.MapCompanyBrainEndpoints();
 app.MapDefaultEndpoints();
 
 app.Run();

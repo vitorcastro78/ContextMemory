@@ -1,0 +1,129 @@
+@page "/companies"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+
+<PageTitle>Companies - ContextMemory Admin</PageTitle>
+
+<div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <h4 class="mb-0">Empresas</h4>
+    <div class="d-flex gap-2">
+        <NavLink class="btn btn-outline-info" href="/companies/dashboard">
+            <i class="fas fa-chart-pie"></i> Dashboard
+        </NavLink>
+        <button class="btn btn-outline-secondary" @onclick="ImportFromDiskAsync" disabled="@_importing">
+            @(_importing ? "A importar…" : "Importar de disco")
+        </button>
+        <NavLink class="btn btn-primary" href="/companies/new">
+            <i class="fas fa-plus"></i> Nova empresa
+        </NavLink>
+    </div>
+</div>
+
+@if (_importMessage is not null)
+{
+    <div class="alert alert-info">@_importMessage</div>
+}
+
+@if (_loading)
+{
+    <div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> A carregar empresas…</div>
+}
+else if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else if (_companies.Count == 0)
+{
+    <div class="alert alert-info">
+        Nenhuma empresa registada. <NavLink href="/companies/new">Criar a primeira</NavLink>.
+    </div>
+}
+else
+{
+    <div class="row">
+        @foreach (var company in _companies)
+        {
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card card-outline card-info">
+                    <div class="card-header">
+                        <h3 class="card-title">@company.Name</h3>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted mb-2"><code>@company.CompanyId</code></p>
+                        @if (!string.IsNullOrWhiteSpace(company.Description))
+                        {
+                            <p class="small mb-0">@company.Description</p>
+                        }
+                    </div>
+                    <div class="card-footer">
+                        <NavLink class="btn btn-sm btn-info" href="@($"/companies/{company.CompanyId}")">Gerir</NavLink>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+    [Inject] private AdminSession Session { get; set; } = default!;
+
+    private readonly List<CompanyProfile> _companies = [];
+    private bool _loading = true;
+    private bool _importing;
+    private string? _error;
+    private string? _importMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsConfigured)
+            await Session.InitializeAsync();
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (!Session.IsConfigured)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        try
+        {
+            _companies.Clear();
+            _companies.AddRange(await Api.GetCompaniesAsync());
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ImportFromDiskAsync()
+    {
+        _importing = true;
+        _importMessage = null;
+        try
+        {
+            var result = await Api.ImportCompaniesFromDiskAsync();
+            _importMessage = $"Importadas {result.CompaniesImported} empresa(s), {result.ProcessesImported} processo(s).";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _importing = false;
+        }
+    }
+}

@@ -41,6 +41,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<IContentRulesStore, PostgresContentRulesStore>();
         services.AddSingleton<IAuditLog, PostgresAuditLog>();
         services.AddSingleton<IMemoryAdminService, PostgresMemoryAdminService>();
+        services.AddSingleton<ICompanyBrainStore, PostgresCompanyBrainStore>();
 
         services.AddSingleton<IPostgresHealthCheck, PostgresHealthCheck>();
         services.AddHostedService<DatabaseInitializerHostedService>();

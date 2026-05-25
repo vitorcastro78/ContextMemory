@@ -18,6 +18,10 @@ public sealed class ContextMemoryDbContext : DbContext
     public DbSet<SemanticFactEntity> SemanticFacts => Set<SemanticFactEntity>();
     public DbSet<FeedbackEntity> Feedback => Set<FeedbackEntity>();
     public DbSet<AuditLogEntity> AuditLogs => Set<AuditLogEntity>();
+    public DbSet<CompanyEntity> Companies => Set<CompanyEntity>();
+    public DbSet<CompanyProcessEntity> CompanyProcesses => Set<CompanyProcessEntity>();
+    public DbSet<CompanyKnowledgeSourceEntity> CompanyKnowledgeSources => Set<CompanyKnowledgeSourceEntity>();
+    public DbSet<CompanyAppLinkEntity> CompanyAppLinks => Set<CompanyAppLinkEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -78,6 +82,43 @@ public sealed class ContextMemoryDbContext : DbContext
             e.HasKey(x => x.Id);
             e.Property(x => x.AppId).HasMaxLength(64);
             e.HasIndex(x => new { x.AppId, x.Timestamp });
+        });
+
+        modelBuilder.Entity<CompanyEntity>(e =>
+        {
+            e.ToTable("companies");
+            e.HasKey(x => x.CompanyId);
+            e.Property(x => x.CompanyId).HasMaxLength(64);
+            e.Property(x => x.SkillsCacheJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<CompanyProcessEntity>(e =>
+        {
+            e.ToTable("company_processes");
+            e.HasKey(x => new { x.CompanyId, x.ProcessId });
+            e.Property(x => x.CompanyId).HasMaxLength(64);
+            e.Property(x => x.ProcessId).HasMaxLength(64);
+            e.Property(x => x.TriggersJson).HasColumnType("jsonb");
+            e.Property(x => x.StepsJson).HasColumnType("jsonb");
+            e.Property(x => x.GuardrailsJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<CompanyKnowledgeSourceEntity>(e =>
+        {
+            e.ToTable("company_knowledge_sources");
+            e.HasKey(x => new { x.CompanyId, x.SourceId });
+            e.Property(x => x.CompanyId).HasMaxLength(64);
+            e.Property(x => x.SourceId).HasMaxLength(64);
+            e.Property(x => x.SettingsJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<CompanyAppLinkEntity>(e =>
+        {
+            e.ToTable("company_app_links");
+            e.HasKey(x => new { x.CompanyId, x.AppId });
+            e.Property(x => x.CompanyId).HasMaxLength(64);
+            e.Property(x => x.AppId).HasMaxLength(64);
+            e.HasIndex(x => x.AppId).IsUnique();
         });
     }
 }
@@ -149,4 +190,48 @@ public sealed class AuditLogEntity
     public string Phase { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
     public DateTimeOffset Timestamp { get; set; }
+}
+
+public sealed class CompanyEntity
+{
+    public string CompanyId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string? WebhookSecret { get; set; }
+    public string? SkillsCacheJson { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class CompanyProcessEntity
+{
+    public string CompanyId { get; set; } = string.Empty;
+    public string ProcessId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Summary { get; set; } = string.Empty;
+    public string Category { get; set; } = nameof(ProcessCategory.General);
+    public string TriggersJson { get; set; } = "[]";
+    public string StepsJson { get; set; } = "[]";
+    public string GuardrailsJson { get; set; } = "[]";
+    public string? SourceRef { get; set; }
+    public bool IsCritical { get; set; }
+    public string PublishStatus { get; set; } = nameof(ProcessPublishStatus.Published);
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class CompanyKnowledgeSourceEntity
+{
+    public string CompanyId { get; set; } = string.Empty;
+    public string SourceId { get; set; } = string.Empty;
+    public string Type { get; set; } = nameof(KnowledgeSourceType.MarkdownWiki);
+    public string DisplayName { get; set; } = string.Empty;
+    public string SettingsJson { get; set; } = "{}";
+    public bool Enabled { get; set; } = true;
+    public DateTimeOffset? LastSyncedAt { get; set; }
+}
+
+public sealed class CompanyAppLinkEntity
+{
+    public string CompanyId { get; set; } = string.Empty;
+    public string AppId { get; set; } = string.Empty;
 }

@@ -1,0 +1,117 @@
+@page "/companies/new"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+
+<PageTitle>Nova empresa - ContextMemory Admin</PageTitle>
+
+<div class="row">
+    <div class="col-lg-8">
+        @if (_created is null)
+        {
+            <div class="card card-outline card-info">
+                <div class="card-header">
+                    <h3 class="card-title">Registar Company Brain</h3>
+                </div>
+                <div class="card-body">
+                    @if (!Session.IsConfigured)
+                    {
+                        <div class="alert alert-warning">
+                            Configure a API URL e a master key em <NavLink href="/settings">Settings</NavLink>.
+                        </div>
+                    }
+                    else
+                    {
+                        <EditForm Model="_form" OnValidSubmit="CreateAsync">
+                            <DataAnnotationsValidator />
+
+                            <div class="form-group">
+                                <label>Company ID</label>
+                                <InputText class="form-control" @bind-Value="_form.CompanyId" placeholder="acme-corp" />
+                                <ValidationMessage For="@(() => _form.CompanyId)" />
+                            </div>
+
+                            <div class="form-group">
+                                <label>Nome</label>
+                                <InputText class="form-control" @bind-Value="_form.Name" placeholder="Acme Corporation" />
+                                <ValidationMessage For="@(() => _form.Name)" />
+                            </div>
+
+                            <div class="form-group">
+                                <label>Descrição</label>
+                                <InputTextArea class="form-control" rows="3" @bind-Value="_form.Description" />
+                            </div>
+
+                            @if (_error is not null)
+                            {
+                                <div class="alert alert-danger">@_error</div>
+                            }
+
+                            <button type="submit" class="btn btn-info" disabled="@_saving">
+                                @(_saving ? "A criar…" : "Criar empresa")
+                            </button>
+                            <NavLink class="btn btn-outline-secondary ml-2" href="/companies">Cancelar</NavLink>
+                        </EditForm>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="card card-outline card-success">
+                <div class="card-header">
+                    <h3 class="card-title">Empresa criada</h3>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-3">Company ID</dt>
+                        <dd class="col-sm-9"><code>@_created.CompanyId</code></dd>
+                        <dt class="col-sm-3">Nome</dt>
+                        <dd class="col-sm-9">@_created.Name</dd>
+                    </dl>
+                </div>
+                <div class="card-footer">
+                    <NavLink class="btn btn-info" href="@($"/companies/{_created.CompanyId}")">Configurar brain</NavLink>
+                    <NavLink class="btn btn-outline-secondary ml-2" href="/companies">Lista</NavLink>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+    [Inject] private AdminSession Session { get; set; } = default!;
+
+    private RegisterCompanyForm _form = new();
+    private CompanyProfile? _created;
+    private bool _saving;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsConfigured)
+            await Session.InitializeAsync();
+    }
+
+    private async Task CreateAsync()
+    {
+        _saving = true;
+        _error = null;
+        try
+        {
+            _created = await Api.RegisterCompanyAsync(_form.ToRequest());
+        }
+        catch (AdminApiException ex)
+        {
+            _error = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

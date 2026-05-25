@@ -50,6 +50,12 @@ public sealed class AuthMiddleware
             return;
         }
 
+        if (IsCompanyPublicAuthPath(path))
+        {
+            await _next(context).ConfigureAwait(false);
+            return;
+        }
+
         if (IsRegisterPath(path))
         {
             if (!ValidateMasterKey(context))
@@ -182,7 +188,29 @@ public sealed class AuthMiddleware
         path.StartsWithSegments("/admin", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsRegisterPath(PathString path) =>
-        path.StartsWithSegments("/apps/register", StringComparison.OrdinalIgnoreCase);
+        path.StartsWithSegments("/apps/register", StringComparison.OrdinalIgnoreCase)
+        || (path.StartsWithSegments("/companies", StringComparison.OrdinalIgnoreCase)
+            && !IsCompanyPublicAuthPath(path));
+
+    private static bool IsCompanyPublicAuthPath(PathString path)
+    {
+        if (!path.StartsWithSegments("/companies", out var remaining))
+            return false;
+
+        var segments = remaining.Value?.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments is null || segments.Length == 0)
+            return false;
+
+        if (segments.Length >= 3
+            && string.Equals(segments[0], "sharepoint", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(segments[1], "oauth", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(segments[2], "callback", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        return segments.Length >= 2
+            && (string.Equals(segments[1], "webhook", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(segments[1], "mcp", StringComparison.OrdinalIgnoreCase));
+    }
 
     private static bool TryGetWikiAppId(PathString path, out string appId)
     {

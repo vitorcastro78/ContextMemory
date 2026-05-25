@@ -31,6 +31,9 @@ public class ContextMemoryOptions
     public List<string> AdminCorsOrigins { get; set; } = [];
     /// <summary>File (default) or Postgres. When Postgres, set ConnectionStrings:ContextMemory.</summary>
     public string PersistenceProvider { get; set; } = "File";
+    public bool EnableCompanyBrainSync { get; set; }
+    public int CompanyBrainSyncIntervalMinutes { get; set; } = 60;
+    public SharePointOAuthOptions SharePointOAuth { get; set; } = new();
     public Dictionary<string, AppOptionsEntry> Apps { get; set; } = new();
 }
 

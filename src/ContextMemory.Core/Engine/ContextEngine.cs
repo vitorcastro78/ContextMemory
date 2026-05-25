@@ -28,6 +28,7 @@ public sealed class ContextEngine : IContextEngine
     private readonly IFeedbackProcessor _feedbackProcessor;
     private readonly IMessageIdTracker _messageIdTracker;
     private readonly ITelemetryCollector _telemetry;
+    private readonly ICompanyBrainService _companyBrain;
     private readonly bool _contentFilterEnabled;
     private readonly bool _feedbackEnabled;
 
@@ -51,6 +52,7 @@ public sealed class ContextEngine : IContextEngine
         IFeedbackProcessor feedbackProcessor,
         IMessageIdTracker messageIdTracker,
         ITelemetryCollector telemetry,
+        ICompanyBrainService companyBrain,
         IOptions<ContextMemoryOptions> options)
     {
         _appRegistry = appRegistry;
@@ -72,6 +74,7 @@ public sealed class ContextEngine : IContextEngine
         _feedbackProcessor = feedbackProcessor;
         _messageIdTracker = messageIdTracker;
         _telemetry = telemetry;
+        _companyBrain = companyBrain;
         _contentFilterEnabled = options.Value.EnableContentFilter;
         _feedbackEnabled = options.Value.EnableFeedback;
     }
@@ -328,6 +331,9 @@ public sealed class ContextEngine : IContextEngine
 
         var mergedProfile = MergeSemanticFacts(userProfile, semanticFacts);
         var intent = _intentDetector.Detect(lastUserMessage?.Content);
+        var executableProcesses = lastUserMessage?.Content is { Length: > 0 } userQuery
+            ? _companyBrain.MatchProcessesForQuery(app.AppId, userQuery)
+            : [];
 
         var promptContext = new PromptContext
         {
@@ -335,7 +341,8 @@ public sealed class ContextEngine : IContextEngine
             UserProfile = mergedProfile,
             WikiChunks = wikiChunks,
             Intent = intent,
-            SessionContext = mergedProfile.SessionContext
+            SessionContext = mergedProfile.SessionContext,
+            ExecutableProcesses = executableProcesses
         };
 
         var systemPrompt = _promptComposer.Compose(promptContext);
