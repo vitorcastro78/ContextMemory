@@ -70,6 +70,13 @@ public class CompanyBrainIntegrationTests : IClassFixture<ContextMemoryWebApplic
             Assert.Equal(HttpStatusCode.Created, upsertResponse.StatusCode);
         }
 
+        using var listProcessesRequest = WithMasterKey(HttpMethod.Get, $"/companies/{companyId}/processes");
+        var listProcessesResponse = await _client.SendAsync(listProcessesRequest);
+        Assert.Equal(HttpStatusCode.OK, listProcessesResponse.StatusCode);
+        var listed = await listProcessesResponse.Content.ReadFromJsonAsync<List<CompanyProcess>>();
+        Assert.NotNull(listed);
+        Assert.Contains(listed!, p => p.ProcessId == "pep-check");
+
         using var skillsRequest = WithMasterKey(HttpMethod.Get, $"/companies/{companyId}/skills");
         var skillsResponse = await _client.SendAsync(skillsRequest);
         Assert.Equal(HttpStatusCode.OK, skillsResponse.StatusCode);

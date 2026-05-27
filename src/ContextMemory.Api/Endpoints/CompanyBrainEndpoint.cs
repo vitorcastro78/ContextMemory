@@ -13,6 +13,7 @@ public static class CompanyBrainEndpoint
         app.MapGet("/companies", ListCompanies);
         app.MapGet("/companies/dashboard", GetGlobalDashboard);
         app.MapGet("/companies/{companyId}", GetCompany);
+        app.MapGet("/companies/{companyId}/processes", ListProcesses);
         app.MapPost("/companies/{companyId}/processes", UpsertProcess).DisableAntiforgery();
         app.MapPost("/companies/{companyId}/processes/search", SearchProcesses).DisableAntiforgery();
         app.MapGet("/companies/{companyId}/processes/pending", ListPendingProcesses);
