@@ -8,6 +8,7 @@ public class ContextMemoryOptions
     public string DataPath { get; set; } = "./data";
     public string WikiPath { get; set; } = "./wikis";
     public string OllamaEndpoint { get; set; } = "http://localhost:11434";
+    public int OllamaRequestTimeoutSeconds { get; set; } = 600;
     public int MaxHistoryMessages { get; set; } = 20;
     public int MaxPayloadBytes { get; set; } = 1_048_576;
     public int WikiChunksTopK { get; set; } = 5;
@@ -26,6 +27,10 @@ public class ContextMemoryOptions
     public bool AdminEnabled { get; set; } = true;
     public int DefaultRateLimitRpm { get; set; } = 60;
     public int DefaultRateLimitTpm { get; set; } = 100_000;
+    public int ActiveUserWindowMinutes { get; set; } = 15;
+    public List<string> AdminCorsOrigins { get; set; } = [];
+    /// <summary>File (default) or Postgres. When Postgres, set ConnectionStrings:ContextMemory.</summary>
+    public string PersistenceProvider { get; set; } = "File";
     public Dictionary<string, AppOptionsEntry> Apps { get; set; } = new();
 }
 

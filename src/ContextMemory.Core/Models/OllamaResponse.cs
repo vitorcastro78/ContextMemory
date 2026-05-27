@@ -42,4 +42,7 @@ public record OllamaResponse
 
     [JsonPropertyName("context")]
     public List<int>? Context { get; init; }
+
+    [JsonPropertyName("context_memory")]
+    public ContextMemoryMetadata? ContextMemory { get; init; }
 }

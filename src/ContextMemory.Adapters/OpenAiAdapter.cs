@@ -26,6 +26,9 @@ public sealed class OpenAiAdapter : ILlmAdapter
     public Task<OllamaResponse> GenerateAsync(OllamaGenerateRequest request, CancellationToken cancellationToken = default) =>
         _client.GenerateAsync(request, cancellationToken);
 
+    public IAsyncEnumerable<OllamaResponse> GenerateStreamAsync(OllamaGenerateRequest request, CancellationToken cancellationToken = default) =>
+        _client.GenerateStreamAsync(request, cancellationToken);
+
     public Task<bool> IsHealthyAsync(CancellationToken cancellationToken = default) =>
         _client.IsHealthyAsync(cancellationToken);
 }

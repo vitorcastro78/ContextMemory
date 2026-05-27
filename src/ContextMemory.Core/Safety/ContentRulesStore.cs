@@ -27,6 +27,18 @@ public sealed class ContentRulesStore : IContentRulesStore
 
     public void Reload(string appId) => _cache[appId] = LoadRules(appId);
 
+    public void EnsureDefaultRules(string appId)
+    {
+        var path = Path.Combine(_profilesRoot, appId, "content-rules.json");
+        if (File.Exists(path))
+            return;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var rules = ContentRulesDefaults.ForApp(appId);
+        File.WriteAllText(path, JsonSerializer.Serialize(rules, JsonOptions));
+        _cache[appId] = rules;
+    }
+
     private ContentRules LoadRules(string appId)
     {
         var path = Path.Combine(_profilesRoot, appId, "content-rules.json");

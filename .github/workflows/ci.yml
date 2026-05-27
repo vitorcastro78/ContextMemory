@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore ContextMemory.sln
+
+      - name: Build
+        run: dotnet build ContextMemory.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/ContextMemory.Api.Tests/ContextMemory.Api.Tests.csproj --configuration Release --no-build --verbosity normal --filter "Category!=OllamaE2E"
+
+  docker-image-size:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t context-memory:ci .
+
+      - name: Assert image size under 200MB
+        run: |
+          SIZE=$(docker image inspect context-memory:ci --format='{{.Size}}')
+          MAX=$((200 * 1024 * 1024))
+          echo "Image size: $SIZE bytes (max $MAX)"
+          if [ "$SIZE" -gt "$MAX" ]; then
+            echo "::error::Docker image exceeds 200MB ($SIZE bytes)"
+            exit 1
+          fi
+
+  ollama-smoke:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    services:
+      ollama:
+        image: ollama/ollama:latest
+        ports:
+          - 11434:11434
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore and build
+        run: |
+          dotnet restore ContextMemory.sln
+          dotnet build tests/ContextMemory.Api.Tests/ContextMemory.Api.Tests.csproj --configuration Release
+
+      - name: Wait for Ollama
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:11434/api/tags && exit 0
+            sleep 2
+          done
+          exit 1
+
+      - name: Ollama E2E smoke tests
+        run: dotnet test tests/ContextMemory.Api.Tests/ContextMemory.Api.Tests.csproj --configuration Release --no-build --verbosity normal --filter "Category=OllamaE2E"
+        env:
+          OLLAMA_E2E: "1"
+          OLLAMA_E2E_URL: "http://localhost:11434"

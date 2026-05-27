@@ -4,11 +4,14 @@ public interface ITelemetryCollector
 {
     void RecordRequest(
         string appId,
+        string userId,
         int statusCode,
         double latencyMs,
         int promptTokens,
         int completionTokens,
         bool ragHit);
+
+    void RecordUserActivity(string appId, string userId);
 
     void RecordFeedback(string appId, int score);
     void RecordContentFiltered(string appId, string reason);
@@ -26,5 +29,6 @@ public sealed class AppTelemetrySnapshot
     public long RagHits { get; init; }
     public double AvgLatencyMs { get; init; }
     public double FeedbackScoreAvg { get; init; }
+    public int ActiveUsers { get; init; }
     public Dictionary<string, long> FilteredByReason { get; init; } = new();
 }

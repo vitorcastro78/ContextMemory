@@ -3,6 +3,7 @@ using System.Text.Json;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
+using ContextMemory.Core.Security;
 using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Core.Profile;
@@ -16,6 +17,8 @@ public sealed class AppRegistry : IAppRegistry
     };
 
     private readonly ConcurrentDictionary<string, AppProfile> _apps = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, RegisteredAppRecord> _registrations = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _seededAppIds = new(StringComparer.Ordinal);
     private readonly ContextMemoryOptions _config;
     private readonly string _registeredAppsPath;
 
@@ -28,7 +31,10 @@ public sealed class AppRegistry : IAppRegistry
         Directory.CreateDirectory(_registeredAppsPath);
 
         foreach (var (appId, entry) in _config.Apps)
+        {
             _apps[appId] = CreateProfile(appId, entry.ApiKey, entry);
+            _seededAppIds.Add(appId);
+        }
 
         LoadRegisteredApps();
     }
@@ -42,13 +48,69 @@ public sealed class AppRegistry : IAppRegistry
 
     public IReadOnlyCollection<AppProfile> GetAllApps() => _apps.Values.ToList();
 
-    internal bool Register(AppProfile profile, RegisteredAppRecord record)
+    public bool TryGetRegistration(string appId, out RegisteredAppRecord? record) =>
+        _registrations.TryGetValue(appId, out record);
+
+    public string GetAppSource(string appId) =>
+        _registrations.ContainsKey(appId) ? "registered" : _seededAppIds.Contains(appId) ? "seed" : "unknown";
+
+    public bool Register(AppProfile profile, RegisteredAppRecord record)
     {
         if (!_apps.TryAdd(profile.AppId, profile))
             return false;
 
+        _registrations[profile.AppId] = record;
         var path = Path.Combine(_registeredAppsPath, $"{profile.AppId}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(record, JsonOptions));
+        return true;
+    }
+
+    public bool TryGetCredentials(string appId, out AppCredentialsInfo? credentials)
+    {
+        if (!_apps.TryGetValue(appId, out var profile) || profile is null)
+        {
+            credentials = null;
+            return false;
+        }
+
+        var source = GetAppSource(appId);
+        credentials = new AppCredentialsInfo
+        {
+            AppId = appId,
+            ApiKey = profile.ApiKey,
+            Source = source,
+            RotationPersists = source == "registered"
+        };
+        return true;
+    }
+
+    public bool TryRotateApiKey(string appId, out AppCredentialsInfo? credentials)
+    {
+        if (!_apps.TryGetValue(appId, out var profile) || profile is null)
+        {
+            credentials = null;
+            return false;
+        }
+
+        var newKey = ApiKeyGenerator.CreateLiveKey();
+        _apps[appId] = profile with { ApiKey = newKey };
+
+        var source = GetAppSource(appId);
+        if (_registrations.TryGetValue(appId, out var record))
+        {
+            var updatedRecord = record with { ApiKey = newKey };
+            _registrations[appId] = updatedRecord;
+            var path = Path.Combine(_registeredAppsPath, $"{appId}.json");
+            File.WriteAllText(path, JsonSerializer.Serialize(updatedRecord, JsonOptions));
+        }
+
+        credentials = new AppCredentialsInfo
+        {
+            AppId = appId,
+            ApiKey = newKey,
+            Source = source,
+            RotationPersists = source == "registered"
+        };
         return true;
     }
 
@@ -71,10 +133,12 @@ public sealed class AppRegistry : IAppRegistry
                 {
                     AppId = record.AppId,
                     ApiKey = record.ApiKey,
-                    WikiPath = ResolveWikiPath(record.WikiPath, record.AppId)
+                    WikiPath = ResolveWikiPath(record.WikiPath, record.AppId),
+                    DefaultLanguage = "pt-PT"
                 };
 
                 _apps[record.AppId] = profile;
+                _registrations[record.AppId] = record;
             }
             catch
             {

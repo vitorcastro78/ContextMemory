@@ -1,21 +1,34 @@
 using System.Collections.Concurrent;
 using System.Text;
+using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
+using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Core.Observability;
 
 public sealed class TelemetryCollector : ITelemetryCollector
 {
+    private readonly TimeSpan _activeUserWindow;
+
     private readonly ConcurrentDictionary<string, AppMetrics> _apps = new(StringComparer.Ordinal);
+
+    public TelemetryCollector(IOptions<ContextMemoryOptions> options)
+    {
+        var minutes = Math.Max(1, options.Value.ActiveUserWindowMinutes);
+        _activeUserWindow = TimeSpan.FromMinutes(minutes);
+    }
 
     public void RecordRequest(
         string appId,
+        string userId,
         int statusCode,
         double latencyMs,
         int promptTokens,
         int completionTokens,
         bool ragHit)
     {
+        RecordUserActivity(appId, userId);
+
         var metrics = _apps.GetOrAdd(appId, _ => new AppMetrics());
         Interlocked.Increment(ref metrics.RequestsTotal);
         if (statusCode >= 400)
@@ -26,9 +39,22 @@ public sealed class TelemetryCollector : ITelemetryCollector
         if (ragHit)
             Interlocked.Increment(ref metrics.RagHits);
 
-        metrics.LatencySamples.Add(latencyMs);
-        if (metrics.LatencySamples.Count > 1000)
-            metrics.LatencySamples.RemoveAt(0);
+        lock (metrics.LatencyLock)
+        {
+            metrics.LatencySamples.Add(latencyMs);
+            if (metrics.LatencySamples.Count > 1000)
+                metrics.LatencySamples.RemoveAt(0);
+        }
+    }
+
+    public void RecordUserActivity(string appId, string userId)
+    {
+        if (string.IsNullOrWhiteSpace(appId) || string.IsNullOrWhiteSpace(userId))
+            return;
+
+        var metrics = _apps.GetOrAdd(appId, _ => new AppMetrics());
+        metrics.ActiveUsers[userId] = DateTimeOffset.UtcNow;
+        PruneInactiveUsers(metrics);
     }
 
     public void RecordFeedback(string appId, int score)
@@ -53,6 +79,8 @@ public sealed class TelemetryCollector : ITelemetryCollector
         if (!_apps.TryGetValue(appId, out var m))
             return new AppTelemetrySnapshot();
 
+        PruneInactiveUsers(m);
+
         return new AppTelemetrySnapshot
         {
             RequestsTotal = m.RequestsTotal,
@@ -62,6 +90,7 @@ public sealed class TelemetryCollector : ITelemetryCollector
             RagHits = m.RagHits,
             AvgLatencyMs = m.LatencySamples.Count > 0 ? m.LatencySamples.Average() : 0,
             FeedbackScoreAvg = m.FeedbackScores.Count > 0 ? m.FeedbackScores.Average() : 0,
+            ActiveUsers = m.ActiveUsers.Count,
             FilteredByReason = m.FilteredByReason.ToDictionary(k => k.Key, v => v.Value)
         };
     }
@@ -74,12 +103,14 @@ public sealed class TelemetryCollector : ITelemetryCollector
         var sb = new StringBuilder();
         foreach (var (appId, m) in _apps)
         {
+            PruneInactiveUsers(m);
             var label = EscapeLabel(appId);
             sb.AppendLine($"cm_requests_total{{appId=\"{label}\",status=\"success\"}} {m.RequestsTotal - m.RequestsError}");
             sb.AppendLine($"cm_requests_total{{appId=\"{label}\",status=\"error\"}} {m.RequestsError}");
             sb.AppendLine($"cm_tokens_prompt_total{{appId=\"{label}\"}} {m.TokensPrompt}");
             sb.AppendLine($"cm_tokens_completion_total{{appId=\"{label}\"}} {m.TokensCompletion}");
             sb.AppendLine($"cm_rag_hits_total{{appId=\"{label}\"}} {m.RagHits}");
+            sb.AppendLine($"cm_active_users{{appId=\"{label}\"}} {m.ActiveUsers.Count}");
 
             var p50 = Percentile(m.LatencySamples, 0.5);
             var p95 = Percentile(m.LatencySamples, 0.95);
@@ -96,6 +127,16 @@ public sealed class TelemetryCollector : ITelemetryCollector
         }
 
         return sb.ToString();
+    }
+
+    private void PruneInactiveUsers(AppMetrics metrics)
+    {
+        var cutoff = DateTimeOffset.UtcNow - _activeUserWindow;
+        foreach (var (userId, lastSeen) in metrics.ActiveUsers.ToArray())
+        {
+            if (lastSeen < cutoff)
+                metrics.ActiveUsers.TryRemove(userId, out _);
+        }
     }
 
     private static double Percentile(List<double> samples, double percentile)
@@ -119,8 +160,10 @@ public sealed class TelemetryCollector : ITelemetryCollector
         public long TokensCompletion;
         public long RagHits;
         public List<double> LatencySamples { get; } = [];
+        public object LatencyLock { get; } = new();
         public List<int> FeedbackScores { get; } = [];
         public object FeedbackLock { get; } = new();
+        public ConcurrentDictionary<string, DateTimeOffset> ActiveUsers { get; } = new(StringComparer.Ordinal);
         public ConcurrentDictionary<string, long> FilteredByReason { get; } = new(StringComparer.Ordinal);
     }
 }

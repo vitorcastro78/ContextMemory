@@ -1,0 +1,12 @@
+﻿<Router AppAssembly="typeof(ContextMemory.Admin.UI.Pages.Dashboard).Assembly" AdditionalAssemblies="new[] { typeof(ContextMemory.Admin.Web.Client.AssemblyMarker).Assembly }">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)" />
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>Not found</PageTitle>
+        <LayoutView Layout="typeof(MainLayout)">
+            <div class="alert alert-warning">Page not found.</div>
+        </LayoutView>
+    </NotFound>
+</Router>

@@ -1,0 +1,61 @@
+.chat-lab .chat-messages {
+    min-height: 380px;
+    max-height: 560px;
+    overflow-y: auto;
+    background: #f8f9fa;
+}
+
+.chat-row {
+    margin-bottom: 1rem;
+    clear: both;
+}
+
+.chat-row-user {
+    text-align: right;
+}
+
+.chat-row-assistant {
+    text-align: left;
+}
+
+.chat-meta {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+}
+
+.chat-bubble {
+    display: inline-block;
+    max-width: 92%;
+    padding: 0.6rem 0.85rem;
+    border-radius: 0.5rem;
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #fff;
+    border: 1px solid #dee2e6;
+}
+
+.chat-row-user .chat-bubble {
+    background: #007bff;
+    color: #fff;
+    border-color: #007bff;
+}
+
+.chat-bubble-error {
+    background: #f8d7da !important;
+    color: #721c24 !important;
+    border-color: #f5c6cb !important;
+}
+
+.chat-raw {
+    font-size: 0.7rem;
+    max-height: 180px;
+    overflow: auto;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 0.5rem;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

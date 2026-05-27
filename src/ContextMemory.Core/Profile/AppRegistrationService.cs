@@ -9,7 +9,7 @@ namespace ContextMemory.Core.Profile;
 
 public sealed class AppRegistrationService : IAppRegistrationService
 {
-    private readonly AppRegistry _appRegistry;
+    private readonly IAppRegistry _appRegistry;
     private readonly IAppConfigStore _appConfigStore;
     private readonly ContextMemoryOptions _options;
 
@@ -18,7 +18,7 @@ public sealed class AppRegistrationService : IAppRegistrationService
         IAppConfigStore appConfigStore,
         IOptions<ContextMemoryOptions> options)
     {
-        _appRegistry = (AppRegistry)appRegistry;
+        _appRegistry = appRegistry;
         _appConfigStore = appConfigStore;
         _options = options.Value;
     }
@@ -37,7 +37,7 @@ public sealed class AppRegistrationService : IAppRegistrationService
 
         var suffix = RandomNumberGenerator.GetHexString(6, lowercase: true);
         var appId = $"{request.Domain}-prod-{suffix}";
-        var apiKey = $"cm_live_{RandomNumberGenerator.GetHexString(24, lowercase: true)}";
+        var apiKey = ApiKeyGenerator.CreateLiveKey();
 
         var wikiPath = !string.IsNullOrWhiteSpace(request.WikiPath)
             ? Path.GetFullPath(request.WikiPath, _options.ContentRootPath)

@@ -2,9 +2,13 @@ using ContextMemory.Api.Endpoints;
 using ContextMemory.Api.Extensions;
 using ContextMemory.Api.Middleware;
 using ContextMemory.Core.Configuration;
+using ContextMemory.Core.Persistence;
+using ContextMemory.Core.Persistence.Postgres;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.AddServiceDefaults();
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -24,9 +28,37 @@ builder.Services.Configure<ContextMemory.Embeddings.Configuration.EmbeddingsOpti
     options.ContentRootPath = builder.Environment.ContentRootPath;
 });
 
+var adminCorsOrigins = builder.Configuration
+    .GetSection($"{ContextMemoryOptions.SectionName}:AdminCorsOrigins")
+    .Get<string[]>() ?? [];
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AdminWebCors", policy =>
+    {
+        if (adminCorsOrigins.Length == 0)
+            return;
+
+        policy.WithOrigins(adminCorsOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
+
 builder.Services.AddContextMemory(builder.Configuration);
+builder.Services.AddContextMemorySwagger();
 
 var app = builder.Build();
+
+if (PersistenceProviders.IsPostgres(builder.Configuration.GetSection(ContextMemoryOptions.SectionName)["PersistenceProvider"]))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var dbFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<ContextMemoryDbContext>>();
+    await using var db = await dbFactory.CreateDbContextAsync();
+    await db.Database.MigrateAsync();
+}
+
+app.UseContextMemorySwagger();
+app.UseCors("AdminWebCors");
 
 app.UseMiddleware<AuthMiddleware>();
 app.UseMiddleware<RateLimitMiddleware>();
@@ -35,11 +67,14 @@ app.UseMiddleware<TelemetryMiddleware>();
 app.MapHealthEndpoint();
 app.MapMetricsEndpoint();
 app.MapChatEndpoint();
+app.MapGenerateEndpoint();
 app.MapFeedbackEndpoint();
+app.MapAppsEndpoint();
 app.MapAdminEndpoints();
 app.MapAppsConfigEndpoints();
 app.MapAppsRegisterEndpoint();
 app.MapAppsWikiEndpoint();
+app.MapDefaultEndpoints();
 
 app.Run();
 

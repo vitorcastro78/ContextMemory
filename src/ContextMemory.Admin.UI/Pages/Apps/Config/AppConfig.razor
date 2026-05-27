@@ -1,0 +1,113 @@
+@page "/apps/{AppId}/config"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+
+<PageTitle>App Config - ContextMemory Admin</PageTitle>
+
+<div class="card card-outline card-primary">
+    <div class="card-header">
+        <h3 class="card-title">Runtime config patch for @AppId</h3>
+    </div>
+    <div class="card-body">
+        <EditForm Model="_form" OnValidSubmit="SaveAsync">
+            <div class="form-group">
+                <label>Default language</label>
+                <InputText class="form-control" @bind-Value="_form.DefaultLanguage" placeholder="pt-PT" />
+            </div>
+            <div class="form-group">
+                <label>LLM model</label>
+                <InputText class="form-control" @bind-Value="_form.LlmModel" placeholder="qwen3.5:4b" />
+            </div>
+            <div class="form-group">
+                <label>LLM backend</label>
+                <InputText class="form-control" @bind-Value="_form.LlmBackend" placeholder="ollama" />
+            </div>
+            <div class="form-group">
+                <label>Max history messages</label>
+                <InputNumber class="form-control" @bind-Value="_form.MaxHistoryMessages" />
+            </div>
+            <div class="form-group">
+                <label>Wiki top K</label>
+                <InputNumber class="form-control" @bind-Value="_form.WikiChunksTopK" />
+            </div>
+            <div class="form-check mb-2">
+                <InputCheckbox class="form-check-input" @bind-Value="_form.SetStreamingEnabled" />
+                <label class="form-check-label">Set streamingEnabled</label>
+            </div>
+            <div class="form-check mb-3">
+                <InputCheckbox class="form-check-input" @bind-Value="_form.StreamingEnabledValue" disabled="@(!_form.SetStreamingEnabled)" />
+                <label class="form-check-label">Streaming enabled value</label>
+            </div>
+
+            @if (_message is not null)
+            {
+                <div class="alert alert-success">@_message</div>
+            }
+            @if (_error is not null)
+            {
+                <div class="alert alert-danger">@_error</div>
+            }
+
+            <button class="btn btn-primary" type="submit" disabled="@_saving">Apply patch</button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private sealed class ConfigPatchForm
+    {
+        public string? DefaultLanguage { get; set; }
+        public string? LlmModel { get; set; }
+        public string? LlmBackend { get; set; }
+        public int? MaxHistoryMessages { get; set; }
+        public int? WikiChunksTopK { get; set; }
+        public bool SetStreamingEnabled { get; set; }
+        public bool StreamingEnabledValue { get; set; }
+    }
+
+    [Parameter] public string AppId { get; set; } = string.Empty;
+    [Inject] private AdminApiClient Api { get; set; } = default!;
+    [Inject] private AdminSession Session { get; set; } = default!;
+
+    private ConfigPatchForm _form = new();
+    private bool _saving;
+    private string? _message;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsConfigured)
+            await Session.InitializeAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _message = null;
+        _error = null;
+        try
+        {
+            var patch = new AppConfigPatchRequest
+            {
+                DefaultLanguage = _form.DefaultLanguage,
+                LlmModel = _form.LlmModel,
+                LlmBackend = _form.LlmBackend,
+                MaxHistoryMessages = _form.MaxHistoryMessages,
+                WikiChunksTopK = _form.WikiChunksTopK,
+                StreamingEnabled = _form.SetStreamingEnabled ? _form.StreamingEnabledValue : null
+            };
+
+            var updated = await Api.PatchConfigAsync(AppId, patch);
+            _message = $"Config updated. Model: {updated?.LlmModel ?? "n/a"}";
+            _form = new ConfigPatchForm();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

@@ -54,11 +54,11 @@ public sealed class AppConfigWatcherHostedService : IHostedService, IDisposable
 
     public Task StopAsync(CancellationToken cancellationToken)
     {
-        foreach (var watcher in _watchers)
+        foreach (var watcher in _watchers.ToArray())
             watcher.Dispose();
         _watchers.Clear();
 
-        foreach (var timer in _debounceTimers.Values)
+        foreach (var timer in _debounceTimers.Values.ToArray())
             timer.Dispose();
         _debounceTimers.Clear();
 
