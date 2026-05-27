@@ -19,3 +19,4 @@ src/ContextMemory.Embeddings/models/*.onnx
 ## IDE
 .idea/
 *.swp
+/.github/copilot-instructions.md
