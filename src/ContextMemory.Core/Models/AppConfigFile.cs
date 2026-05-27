@@ -27,6 +27,30 @@ public record AppConfigFile
 
     [JsonPropertyName("rateLimits")]
     public RateLimitConfig? RateLimits { get; init; }
+
+    [JsonPropertyName("knowledgeLoopEnabled")]
+    public bool KnowledgeLoopEnabled { get; init; }
+
+    [JsonPropertyName("knowledgeLoopMinMessages")]
+    public int KnowledgeLoopMinMessages { get; init; } = 6;
+
+    [JsonPropertyName("knowledgeLoopAutoApproveThreshold")]
+    public float KnowledgeLoopAutoApproveThreshold { get; init; } = 0.75f;
+
+    [JsonPropertyName("knowledgeLoopManualReviewThreshold")]
+    public float KnowledgeLoopManualReviewThreshold { get; init; } = 0.50f;
+
+    [JsonPropertyName("knowledgeLoopMaxChunksPerDay")]
+    public int KnowledgeLoopMaxChunksPerDay { get; init; } = 20;
+
+    [JsonPropertyName("toolCallEnabled")]
+    public bool ToolCallEnabled { get; init; }
+
+    [JsonPropertyName("toolCallMaxIterations")]
+    public int ToolCallMaxIterations { get; init; } = 5;
+
+    [JsonPropertyName("planId")]
+    public string PlanId { get; init; } = "pro";
 }
 
 public record AppConfigPatchRequest

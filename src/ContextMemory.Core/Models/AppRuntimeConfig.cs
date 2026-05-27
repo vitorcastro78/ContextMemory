@@ -14,4 +14,12 @@ public record AppRuntimeConfig
     public float SimilarityThreshold { get; init; } = 0.65f;
     public bool StreamingEnabled { get; init; } = true;
     public RateLimitConfig RateLimits { get; init; } = new();
+    public bool KnowledgeLoopEnabled { get; init; }
+    public int KnowledgeLoopMinMessages { get; init; } = 6;
+    public float KnowledgeLoopAutoApproveThreshold { get; init; } = 0.75f;
+    public float KnowledgeLoopManualReviewThreshold { get; init; } = 0.50f;
+    public int KnowledgeLoopMaxChunksPerDay { get; init; } = 20;
+    public bool ToolCallEnabled { get; init; }
+    public int ToolCallMaxIterations { get; init; } = 5;
+    public string PlanId { get; init; } = "pro";
 }

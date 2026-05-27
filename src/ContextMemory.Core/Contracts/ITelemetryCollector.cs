@@ -15,6 +15,13 @@ public interface ITelemetryCollector
 
     void RecordFeedback(string appId, int score);
     void RecordContentFiltered(string appId, string reason);
+    void RecordKnowledgeLoopEvaluated(string appId);
+    void RecordKnowledgeLoopApproved(string appId);
+    void RecordKnowledgeLoopRejected(string appId);
+    void RecordKnowledgeLoopChunkCreated(string appId);
+    void RecordKnowledgeLoopChunkMerged(string appId);
+    void RecordToolCall(string appId, string toolName, bool success, double durationMs);
+    void RecordQuotaExceeded(string appId, string reason);
     string ExportPrometheus();
     AppTelemetrySnapshot GetAppSnapshot(string appId);
     IReadOnlyDictionary<string, AppTelemetrySnapshot> GetAllSnapshots();

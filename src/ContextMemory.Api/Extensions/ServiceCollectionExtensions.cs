@@ -2,15 +2,18 @@ using ContextMemory.Adapters;
 using ContextMemory.Api.Hosting;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
+using ContextMemory.Core.Billing;
 using ContextMemory.Core.Engine;
 using ContextMemory.Core.Feedback;
 using ContextMemory.Core.Knowledge;
+using ContextMemory.Core.KnowledgeLoop;
 using ContextMemory.Core.Memory;
 using ContextMemory.Core.Observability;
 using ContextMemory.Core.Persistence;
 using ContextMemory.Core.Profile;
 using ContextMemory.Core.RateLimiting;
 using ContextMemory.Core.Safety;
+using ContextMemory.Core.Tools;
 using ContextMemory.Embeddings;
 using ContextMemory.Embeddings.Configuration;
 using Microsoft.Extensions.Configuration;
@@ -43,6 +46,7 @@ public static class ServiceCollectionExtensions
             services.AddSingleton<IContentRulesStore, ContentRulesStore>();
             services.AddSingleton<IAuditLog, AuditLog>();
             services.AddSingleton<IMemoryAdminService, MemoryAdminService>();
+            services.AddSingleton<IKnowledgeLoopStore, FileKnowledgeLoopStore>();
         }
 
         services.AddSingleton<IAppRegistrationService, AppRegistrationService>();
@@ -52,9 +56,31 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<WikiLoader>();
         services.AddSingleton<VectorStore>();
         services.AddSingleton<SimilaritySearch>();
+        if (usePostgres)
+        {
+            var connectionString = configuration.GetConnectionString("ContextMemory")
+                ?? throw new InvalidOperationException("ConnectionStrings:ContextMemory is required for Postgres.");
+            services.AddSingleton<IPgVectorStore>(sp =>
+                new PgVectorStore(connectionString, sp.GetRequiredService<ILogger<PgVectorStore>>()));
+        }
+        else
+        {
+            services.AddSingleton<IPgVectorStore, FileVectorStoreAdapter>();
+        }
+        services.AddSingleton<IWikiVectorSearch, WikiVectorSearchAdapter>();
         services.AddSingleton<IWikiIndexService, WikiIndexService>();
+        services.AddSingleton<ConversationEvaluator>();
+        services.AddSingleton<KnowledgeExtractor>();
+        services.AddSingleton<KnowledgeMerger>();
+        services.AddSingleton<WikiIngestionService>();
+        services.AddSingleton<IKnowledgeLoop, KnowledgeLoopOrchestrator>();
+        services.AddSingleton<IPlanStore, PlanStore>();
+        services.AddSingleton<QuotaEnforcer>();
         services.AddSingleton<IEmbeddingEngine, OnnxEmbeddingEngine>();
         services.AddSingleton<PromptComposer>();
+        services.AddSingleton<ToolCallParser>();
+        services.AddSingleton<IToolRegistry, ToolRegistry>();
+        services.AddSingleton<BuiltinToolsRegistrar>();
         services.AddSingleton<IContextEngine, ContextEngine>();
 
         services.AddSingleton<IImplicitFeedbackDetector, ImplicitFeedbackDetector>();
@@ -79,6 +105,7 @@ public static class ServiceCollectionExtensions
         if (!usePostgres)
             services.AddHostedService<AppConfigWatcherHostedService>();
         services.AddHostedService<WikiWatcherHostedService>();
+        services.AddHostedService<KnowledgeLoopBackgroundService>();
 
         return services;
     }

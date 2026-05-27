@@ -90,6 +90,35 @@ public sealed class AdminApiClient
         return items ?? [];
     }
 
+    public Task<KnowledgeLoopStatsDto?> GetKnowledgeLoopStatsAsync(string appId, CancellationToken cancellationToken = default) =>
+        GetAsync<KnowledgeLoopStatsDto>($"/admin/apps/{Uri.EscapeDataString(appId)}/knowledge-loop/stats", cancellationToken);
+
+    public async Task<IReadOnlyList<KnowledgeLoopEntryDto>> GetKnowledgeLoopPendingReviewAsync(
+        string appId,
+        CancellationToken cancellationToken = default)
+    {
+        var items = await GetAsync<List<KnowledgeLoopEntryDto>>(
+            $"/admin/apps/{Uri.EscapeDataString(appId)}/knowledge-loop/pending-review",
+            cancellationToken).ConfigureAwait(false);
+        return items ?? [];
+    }
+
+    public async Task ApproveKnowledgeLoopAsync(string appId, string sessionId, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Post,
+            $"/admin/apps/{Uri.EscapeDataString(appId)}/knowledge-loop/approve/{Uri.EscapeDataString(sessionId)}");
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+    }
+
+    public async Task RejectKnowledgeLoopAsync(string appId, string sessionId, CancellationToken cancellationToken = default)
+    {
+        using var request = CreateRequest(HttpMethod.Delete,
+            $"/admin/apps/{Uri.EscapeDataString(appId)}/knowledge-loop/reject/{Uri.EscapeDataString(sessionId)}");
+        using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        await EnsureSuccessAsync(response).ConfigureAwait(false);
+    }
+
     public async Task<RegisterAppResponse> RegisterAppAsync(
         RegisterAppRequest request,
         CancellationToken cancellationToken = default)

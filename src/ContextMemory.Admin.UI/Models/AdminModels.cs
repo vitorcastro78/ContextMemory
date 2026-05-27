@@ -31,6 +31,28 @@ public sealed class AppStatsResponse
     public double? FeedbackAverage { get; set; }
 }
 
+public sealed class KnowledgeLoopStatsDto
+{
+    public int SessionsEvaluated { get; set; }
+    public int SessionsApproved { get; set; }
+    public int ChunksCreated { get; set; }
+    public int ChunksMerged { get; set; }
+    public int ChunksRejected { get; set; }
+}
+
+public sealed class KnowledgeLoopEntryDto
+{
+    public string SessionId { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public KnowledgeLoopEvaluationDto? Evaluation { get; set; }
+}
+
+public sealed class KnowledgeLoopEvaluationDto
+{
+    public float Score { get; set; }
+    public string Reasoning { get; set; } = string.Empty;
+}
+
 public sealed class AppCredentialsDto
 {
     public string AppId { get; set; } = string.Empty;

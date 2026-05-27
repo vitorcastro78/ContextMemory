@@ -74,6 +74,34 @@ public sealed class TelemetryCollector : ITelemetryCollector
         metrics.FilteredByReason.AddOrUpdate(reason, 1, (_, c) => c + 1);
     }
 
+    public void RecordKnowledgeLoopEvaluated(string appId) =>
+        Interlocked.Increment(ref _apps.GetOrAdd(appId, _ => new AppMetrics()).KlEvaluated);
+
+    public void RecordKnowledgeLoopApproved(string appId) =>
+        Interlocked.Increment(ref _apps.GetOrAdd(appId, _ => new AppMetrics()).KlApproved);
+
+    public void RecordKnowledgeLoopRejected(string appId) =>
+        Interlocked.Increment(ref _apps.GetOrAdd(appId, _ => new AppMetrics()).KlRejected);
+
+    public void RecordKnowledgeLoopChunkCreated(string appId) =>
+        Interlocked.Increment(ref _apps.GetOrAdd(appId, _ => new AppMetrics()).KlChunksCreated);
+
+    public void RecordKnowledgeLoopChunkMerged(string appId) =>
+        Interlocked.Increment(ref _apps.GetOrAdd(appId, _ => new AppMetrics()).KlChunksMerged);
+
+    public void RecordToolCall(string appId, string toolName, bool success, double durationMs)
+    {
+        var metrics = _apps.GetOrAdd(appId, _ => new AppMetrics());
+        var key = $"{toolName}:{(success ? "success" : "error")}";
+        metrics.ToolCalls.AddOrUpdate(key, 1, (_, c) => c + 1);
+    }
+
+    public void RecordQuotaExceeded(string appId, string reason)
+    {
+        var metrics = _apps.GetOrAdd(appId, _ => new AppMetrics());
+        metrics.QuotaExceeded.AddOrUpdate(reason, 1, (_, c) => c + 1);
+    }
+
     public AppTelemetrySnapshot GetAppSnapshot(string appId)
     {
         if (!_apps.TryGetValue(appId, out var m))
@@ -124,6 +152,23 @@ public sealed class TelemetryCollector : ITelemetryCollector
 
             foreach (var (reason, count) in m.FilteredByReason)
                 sb.AppendLine($"cm_content_filtered_total{{appId=\"{label}\",reason=\"{EscapeLabel(reason)}\"}} {count}");
+
+            sb.AppendLine($"cm_knowledge_loop_sessions_evaluated_total{{appId=\"{label}\"}} {m.KlEvaluated}");
+            sb.AppendLine($"cm_knowledge_loop_sessions_approved_total{{appId=\"{label}\"}} {m.KlApproved}");
+            sb.AppendLine($"cm_knowledge_loop_sessions_rejected_total{{appId=\"{label}\"}} {m.KlRejected}");
+            sb.AppendLine($"cm_knowledge_loop_chunks_created_total{{appId=\"{label}\"}} {m.KlChunksCreated}");
+            sb.AppendLine($"cm_knowledge_loop_chunks_merged_total{{appId=\"{label}\"}} {m.KlChunksMerged}");
+
+            foreach (var (toolKey, count) in m.ToolCalls)
+            {
+                var parts = toolKey.Split(':', 2);
+                var toolName = parts.Length > 0 ? parts[0] : "unknown";
+                var status = parts.Length > 1 ? parts[1] : "success";
+                sb.AppendLine($"cm_tool_calls_total{{appId=\"{label}\",tool_name=\"{EscapeLabel(toolName)}\",status=\"{status}\"}} {count}");
+            }
+
+            foreach (var (reason, count) in m.QuotaExceeded)
+                sb.AppendLine($"cm_quota_exceeded_total{{appId=\"{label}\",reason=\"{EscapeLabel(reason)}\"}} {count}");
         }
 
         return sb.ToString();
@@ -165,5 +210,12 @@ public sealed class TelemetryCollector : ITelemetryCollector
         public object FeedbackLock { get; } = new();
         public ConcurrentDictionary<string, DateTimeOffset> ActiveUsers { get; } = new(StringComparer.Ordinal);
         public ConcurrentDictionary<string, long> FilteredByReason { get; } = new(StringComparer.Ordinal);
+        public long KlEvaluated;
+        public long KlApproved;
+        public long KlRejected;
+        public long KlChunksCreated;
+        public long KlChunksMerged;
+        public ConcurrentDictionary<string, long> ToolCalls { get; } = new(StringComparer.Ordinal);
+        public ConcurrentDictionary<string, long> QuotaExceeded { get; } = new(StringComparer.Ordinal);
     }
 }

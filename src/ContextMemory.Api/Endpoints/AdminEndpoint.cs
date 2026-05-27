@@ -1,3 +1,4 @@
+using ContextMemory.Core.Billing;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 
@@ -17,6 +18,29 @@ public static class AdminEndpoint
         app.MapGet("/admin/apps/{appId}/audit", GetAudit);
         app.MapGet("/admin/apps/{appId}/credentials", GetCredentials);
         app.MapPost("/admin/apps/{appId}/rotate-api-key", RotateApiKey).DisableAntiforgery();
+        app.MapGet("/admin/apps/{appId}/plan", GetPlan);
+        app.MapPatch("/admin/apps/{appId}/plan", PatchPlan).DisableAntiforgery();
+    }
+
+    private static async Task<IResult> GetPlan(string appId, IPlanStore planStore, CancellationToken cancellationToken)
+    {
+        var plan = await planStore.GetPlanAsync(appId, cancellationToken).ConfigureAwait(false);
+        var usage = await planStore.GetDailyUsageAsync(appId, cancellationToken).ConfigureAwait(false);
+        return Results.Json(new { appId, plan, usage });
+    }
+
+    private static async Task<IResult> PatchPlan(
+        string appId,
+        PlanPatchRequest body,
+        IPlanStore planStore,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(body.PlanId))
+            return Results.BadRequest(new { error = "planId required" });
+
+        await planStore.SetPlanAsync(appId, body.PlanId, cancellationToken).ConfigureAwait(false);
+        var plan = await planStore.GetPlanAsync(appId, cancellationToken).ConfigureAwait(false);
+        return Results.Json(new { appId, plan });
     }
 
     private static IResult ListApps(IAppRegistry registry, ITelemetryCollector telemetry) =>

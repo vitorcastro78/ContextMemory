@@ -429,6 +429,18 @@ File: `data/app-profiles/{appId}/content-rules.json`
 - `GET|PATCH /apps/{appId}/config`
 - `PUT /apps/{appId}/session-context`
 - `POST /apps/{appId}/wiki` (multipart `.md` upload)
+- `POST /apps/{appId}/events` (webhook de contexto externo)
+- `POST /apps/{appId}/knowledge-loop/run`
+- `GET /apps/{appId}/knowledge-loop/stats`
+
+### Master key — KnowledgeLoop admin (v2)
+
+- `GET /admin/apps/{appId}/knowledge-loop`
+- `GET /admin/apps/{appId}/knowledge-loop/stats`
+- `GET /admin/apps/{appId}/knowledge-loop/pending-review`
+- `POST /admin/apps/{appId}/knowledge-loop/approve/{sessionId}`
+- `DELETE /admin/apps/{appId}/knowledge-loop/reject/{sessionId}`
+- `GET|PATCH /admin/apps/{appId}/plan`
 
 ### Feedback example
 

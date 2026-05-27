@@ -1,3 +1,4 @@
+using System.Text.Json;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -10,19 +11,32 @@ public sealed class ProfileLearner : IProfileLearner
     private readonly ISemanticMemory _semanticMemory;
     private readonly IFeedbackStore _feedbackStore;
     private readonly IAppConfigStore _appConfigStore;
+    private readonly ILlmAdapterResolver? _adapterResolver;
     private readonly ILogger<ProfileLearner> _logger;
+
+    private const string FactExtractionPrompt = """
+        Analisa a seguinte mensagem do utilizador e identifica factos
+        reutilizáveis sobre as suas preferências, competências ou contexto de trabalho.
+
+        Responde APENAS com um array JSON de strings (pode ser vazio []):
+        ["facto 1", "facto 2"]
+
+        MENSAGEM: {message}
+        """;
 
     public ProfileLearner(
         IUserProfileStore userProfileStore,
         ISemanticMemory semanticMemory,
         IFeedbackStore feedbackStore,
         IAppConfigStore appConfigStore,
-        ILogger<ProfileLearner> logger)
+        ILogger<ProfileLearner> logger,
+        ILlmAdapterResolver? adapterResolver = null)
     {
         _userProfileStore = userProfileStore;
         _semanticMemory = semanticMemory;
         _feedbackStore = feedbackStore;
         _appConfigStore = appConfigStore;
+        _adapterResolver = adapterResolver;
         _logger = logger;
     }
 
@@ -48,7 +62,7 @@ public sealed class ProfileLearner : IProfileLearner
     {
         try
         {
-            var facts = ExtractFacts(userMessage, assistantMessage);
+            var facts = await ExtractFactsAsync(appId, userMessage, assistantMessage).ConfigureAwait(false);
             if (facts.Count > 0)
             {
                 await _userProfileStore
@@ -176,6 +190,55 @@ public sealed class ProfileLearner : IProfileLearner
             var r when r.Contains("lista") || r.Contains("format") => "Prefere respostas em formato de lista",
             _ => null
         };
+
+    private async Task<List<string>> ExtractFactsAsync(
+        string appId,
+        string userMessage,
+        string assistantMessage)
+    {
+        if (_adapterResolver is not null)
+        {
+            try
+            {
+                var llmFacts = await ExtractFactsWithLlmAsync(appId, userMessage, CancellationToken.None)
+                    .ConfigureAwait(false);
+                if (llmFacts.Count > 0)
+                    return llmFacts;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "LLM fact extraction failed, using keyword fallback for {AppId}", appId);
+            }
+        }
+
+        return ExtractFacts(userMessage, assistantMessage);
+    }
+
+    private async Task<List<string>> ExtractFactsWithLlmAsync(
+        string appId,
+        string userMessage,
+        CancellationToken cancellationToken)
+    {
+        var config = _appConfigStore.GetConfig(appId);
+        var adapter = _adapterResolver!.Resolve(config.LlmBackend);
+        var response = await adapter.GenerateAsync(
+            new OllamaGenerateRequest
+            {
+                Model = config.LlmModel,
+                Prompt = FactExtractionPrompt.Replace("{message}", userMessage, StringComparison.Ordinal),
+                Stream = false,
+                Format = "json"
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        var json = response.Response ?? "[]";
+        var start = json.IndexOf('[');
+        var end = json.LastIndexOf(']');
+        if (start >= 0 && end > start)
+            json = json[start..(end + 1)];
+
+        return JsonSerializer.Deserialize<List<string>>(json) ?? [];
+    }
 
     internal static List<string> ExtractFacts(string userMessage, string assistantMessage)
     {

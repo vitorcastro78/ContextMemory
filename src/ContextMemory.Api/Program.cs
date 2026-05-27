@@ -74,6 +74,8 @@ app.MapAdminEndpoints();
 app.MapAppsConfigEndpoints();
 app.MapAppsRegisterEndpoint();
 app.MapAppsWikiEndpoint();
+app.MapKnowledgeLoopEndpoints();
+app.MapEventsEndpoint();
 app.MapDefaultEndpoints();
 
 app.Run();

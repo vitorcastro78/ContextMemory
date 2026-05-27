@@ -1,6 +1,7 @@
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Feedback;
+using ContextMemory.Core.KnowledgeLoop;
 using ContextMemory.Core.Memory;
 using ContextMemory.Core.Persistence;
 using ContextMemory.Core.Persistence.Postgres;
@@ -41,6 +42,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddSingleton<IContentRulesStore, PostgresContentRulesStore>();
         services.AddSingleton<IAuditLog, PostgresAuditLog>();
         services.AddSingleton<IMemoryAdminService, PostgresMemoryAdminService>();
+        services.AddSingleton<IKnowledgeLoopStore, PostgresKnowledgeLoopStore>();
 
         services.AddSingleton<IPostgresHealthCheck, PostgresHealthCheck>();
         services.AddHostedService<DatabaseInitializerHostedService>();
@@ -81,6 +83,23 @@ internal sealed class DatabaseInitializerHostedService : IHostedService
     {
         await using var db = await _dbFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync("CREATE EXTENSION IF NOT EXISTS vector", cancellationToken)
+            .ConfigureAwait(false);
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS wiki_chunks (
+                id BIGSERIAL PRIMARY KEY,
+                app_id VARCHAR(64) NOT NULL,
+                source TEXT NOT NULL,
+                header_path TEXT NOT NULL,
+                content TEXT NOT NULL,
+                embedding vector(384),
+                is_learned BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX IF NOT EXISTS wiki_chunks_app_idx ON wiki_chunks (app_id);
+            """,
+            cancellationToken).ConfigureAwait(false);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

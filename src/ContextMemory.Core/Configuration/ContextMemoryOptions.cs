@@ -31,6 +31,17 @@ public class ContextMemoryOptions
     public List<string> AdminCorsOrigins { get; set; } = [];
     /// <summary>File (default) or Postgres. When Postgres, set ConnectionStrings:ContextMemory.</summary>
     public string PersistenceProvider { get; set; } = "File";
+    public bool KnowledgeLoopEnabled { get; set; } = true;
+    public int KnowledgeLoopMinMessages { get; set; } = 6;
+    public float KnowledgeLoopAutoApproveThreshold { get; set; } = 0.75f;
+    public float KnowledgeLoopManualReviewThreshold { get; set; } = 0.50f;
+    public int KnowledgeLoopMaxChunksPerDay { get; set; } = 20;
+    public int KnowledgeLoopProcessIntervalHours { get; set; } = 1;
+    public bool PgVectorEnabled { get; set; } = true;
+    public bool ToolCallEnabled { get; set; } = true;
+    public int ToolCallMaxIterations { get; set; } = 5;
+    public bool BillingEnabled { get; set; }
+    public string DefaultPlan { get; set; } = "pro";
     public Dictionary<string, AppOptionsEntry> Apps { get; set; } = new();
 }
 

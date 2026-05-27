@@ -1,31 +1,26 @@
 using System.Collections.Concurrent;
-using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Core.Knowledge;
 
 public sealed class WikiIndexService : IWikiIndexService
 {
     private readonly WikiLoader _wikiLoader;
-    private readonly VectorStore _vectorStore;
-    private readonly SimilaritySearch _similaritySearch;
+    private readonly IPgVectorStore _vectorStore;
     private readonly IEmbeddingEngine _embeddingEngine;
     private readonly ILogger<WikiIndexService> _logger;
     private readonly ConcurrentDictionary<string, byte> _indexedApps = new();
 
     public WikiIndexService(
         WikiLoader wikiLoader,
-        VectorStore vectorStore,
-        SimilaritySearch similaritySearch,
+        IPgVectorStore vectorStore,
         IEmbeddingEngine embeddingEngine,
         ILogger<WikiIndexService> logger)
     {
         _wikiLoader = wikiLoader;
         _vectorStore = vectorStore;
-        _similaritySearch = similaritySearch;
         _embeddingEngine = embeddingEngine;
         _logger = logger;
     }
@@ -68,8 +63,8 @@ public sealed class WikiIndexService : IWikiIndexService
         var fullPath = Path.Combine(wikiPath, relativeFilePath.Replace('/', Path.DirectorySeparatorChar));
         if (!File.Exists(fullPath))
         {
-            await RemoveFileEntriesAsync(appId, relativeFilePath.Replace('\\', '/'), wikiPath, cancellationToken)
-                .ConfigureAwait(false);
+            var source = relativeFilePath.Replace('\\', '/');
+            await _vectorStore.DeleteBySourceAsync(appId, source, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -77,14 +72,14 @@ public sealed class WikiIndexService : IWikiIndexService
             return;
 
         var chunks = _wikiLoader.LoadFile(wikiPath, fullPath);
-        var entries = await BuildEntriesAsync(appId, chunks, cancellationToken).ConfigureAwait(false);
-        var source = relativeFilePath.Replace('\\', '/');
+        var sourcePath = relativeFilePath.Replace('\\', '/');
+        var entries = await BuildChunkVectorsAsync(appId, chunks, cancellationToken).ConfigureAwait(false);
         await _vectorStore
-            .ReplaceFileEntriesAsync(appId, source, entries, wikiPath, cancellationToken)
+            .ReplaceFileChunksAsync(appId, wikiPath, sourcePath, entries, cancellationToken)
             .ConfigureAwait(false);
 
         _indexedApps[appId] = 0;
-        _logger.LogInformation("Re-indexed wiki file {Source} for {AppId} ({Count} chunks)", source, appId, entries.Count);
+        _logger.LogInformation("Re-indexed wiki file {Source} for {AppId} ({Count} chunks)", sourcePath, appId, entries.Count);
     }
 
     public async Task<IReadOnlyList<WikiChunk>> SearchAsync(
@@ -97,12 +92,18 @@ public sealed class WikiIndexService : IWikiIndexService
         if (string.IsNullOrWhiteSpace(query) || !_embeddingEngine.IsAvailable)
             return [];
 
-        var entries = _vectorStore.GetEntries(appId);
-        if (entries.Count == 0)
+        var count = await _vectorStore.GetChunkCountAsync(appId, cancellationToken).ConfigureAwait(false);
+        if (count == 0)
             return [];
 
         var queryVector = await _embeddingEngine.EmbedAsync(query, cancellationToken).ConfigureAwait(false);
-        return _similaritySearch.Search(entries, queryVector, topK, threshold);
+        var hits = await _vectorStore
+            .SearchAsync(appId, queryVector, topK, threshold, cancellationToken)
+            .ConfigureAwait(false);
+
+        return hits
+            .Select(h => new WikiChunk(h.Content, h.Source, h.HeaderPath))
+            .ToList();
     }
 
     private async Task ReindexAllAsync(string appId, string wikiPath, CancellationToken cancellationToken)
@@ -114,22 +115,12 @@ public sealed class WikiIndexService : IWikiIndexService
             allChunks.AddRange(_wikiLoader.LoadFile(wikiPath, file));
         }
 
-        var entries = await BuildEntriesAsync(appId, allChunks, cancellationToken).ConfigureAwait(false);
-        await _vectorStore.ReplaceAllEntriesAsync(appId, entries, wikiPath, cancellationToken).ConfigureAwait(false);
+        var entries = await BuildChunkVectorsAsync(appId, allChunks, cancellationToken).ConfigureAwait(false);
+        await _vectorStore.UpsertChunksAsync(appId, wikiPath, entries, cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Full wiki index built for {AppId} ({Count} chunks)", appId, entries.Count);
     }
 
-    private async Task RemoveFileEntriesAsync(
-        string appId,
-        string source,
-        string wikiPath,
-        CancellationToken cancellationToken)
-    {
-        await _vectorStore.ReplaceFileEntriesAsync(appId, source, [], wikiPath, cancellationToken)
-            .ConfigureAwait(false);
-    }
-
-    private async Task<IReadOnlyList<VectorEntry>> BuildEntriesAsync(
+    private async Task<IReadOnlyList<WikiChunkVector>> BuildChunkVectorsAsync(
         string appId,
         IReadOnlyList<WikiChunk> chunks,
         CancellationToken cancellationToken)
@@ -139,19 +130,20 @@ public sealed class WikiIndexService : IWikiIndexService
 
         var texts = chunks.Select(c => c.Content).ToList();
         var vectors = await _embeddingEngine.EmbedBatchAsync(texts, cancellationToken).ConfigureAwait(false);
-        var entries = new List<VectorEntry>(chunks.Count);
+        var result = new List<WikiChunkVector>(chunks.Count);
 
         for (var i = 0; i < chunks.Count; i++)
         {
-            entries.Add(new VectorEntry
+            result.Add(new WikiChunkVector
             {
-                AppId = appId,
-                Text = chunks[i].Content,
                 Source = chunks[i].Source,
-                Vector = vectors[i]
+                HeaderPath = chunks[i].HeaderPath,
+                Content = chunks[i].Content,
+                Vector = vectors[i],
+                IsLearned = chunks[i].Source.Contains("learned/", StringComparison.OrdinalIgnoreCase)
             });
         }
 
-        return entries;
+        return result;
     }
 }

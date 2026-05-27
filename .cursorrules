@@ -9,7 +9,7 @@
 
 ## Contrato Ollama
 - NUNCA alterar campos do request que não sejam messages[]
-- NUNCA modificar a response do Ollama — apenas fazer pipe ao cliente
+- NUNCA modificar a response do Ollama — apenas fazer pipe ao cliente (excepto loop tool_call interno)
 - SEMPRE preservar todos os campos de métricas (total_duration, eval_count, etc.)
 - SEMPRE propagar erros HTTP do Ollama com o mesmo status code ao cliente
 - SEMPRE suportar streaming e non-streaming no mesmo endpoint
@@ -50,3 +50,24 @@
 - SEMPRE usar SlidingWindowRateLimiter nativo do .NET 9
 - SEMPRE incluir header Retry-After na resposta 429
 - SEMPRE contar tokens estimados (chars / 4) quando tokens reais não disponíveis
+
+## KnowledgeLoop (v2.0)
+- NUNCA bloquear o pipeline principal com operações do KnowledgeLoop — sempre fire-and-forget
+- NUNCA ingerir conhecimento sem passar pelo ConversationEvaluator primeiro
+- NUNCA criar chunks duplicados — sempre verificar similaridade >= 0.85 antes de criar
+- SEMPRE escrever chunks learned em wikis/{appId}/learned/ separado do manual/
+- SEMPRE chamar ReindexFileAsync após escrever novo chunk
+
+## Tool Calls Hermes (v2.0)
+- NUNCA executar tool_call sem validar o nome da tool contra IToolRegistry
+- NUNCA permitir mais de ToolCallMaxIterations iterações por request
+- SEMPRE incluir o resultado da tool como mensagem role=tool antes de re-invocar o LLM
+
+## pgvector (v2.0)
+- SEMPRE usar PgVectorStore quando PersistenceProvider=Postgres
+- SEMPRE usar vector(384) como dimensão (all-MiniLM-L6-v2)
+
+## Billing (v2.0)
+- NUNCA processar request sem verificar QuotaEnforcer quando BillingEnabled=true
+- SEMPRE retornar 429 com reason daily_quota_exceeded quando quota atingida
+- SEMPRE incluir headers X-Quota-Remaining e X-Quota-Reset-At

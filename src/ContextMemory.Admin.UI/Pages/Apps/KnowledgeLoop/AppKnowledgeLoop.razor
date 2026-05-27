@@ -1,0 +1,104 @@
+@page "/apps/{AppId}/knowledge-loop"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@layout MainLayout
+@inject AdminApiClient Api
+
+<PageTitle>KnowledgeLoop - @AppId</PageTitle>
+
+@if (_loading)
+{
+    <div class="alert alert-info">A carregar…</div>
+}
+else if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+else
+{
+    <div class="card card-outline card-success mb-3">
+        <div class="card-header">
+            <h3 class="card-title">KnowledgeLoop — @AppId</h3>
+        </div>
+        <div class="card-body">
+            @if (_stats is not null)
+            {
+                <div class="row text-center mb-3">
+                    <div class="col"><small>Avaliadas</small><div><strong>@_stats.SessionsEvaluated</strong></div></div>
+                    <div class="col"><small>Aprovadas</small><div><strong>@_stats.SessionsApproved</strong></div></div>
+                    <div class="col"><small>Chunks criados</small><div><strong>@_stats.ChunksCreated</strong></div></div>
+                    <div class="col"><small>Rejeitadas</small><div><strong>@_stats.ChunksRejected</strong></div></div>
+                </div>
+            }
+
+            <h5>Revisão pendente</h5>
+            @if (_pending.Count == 0)
+            {
+                <p class="text-muted">Nenhuma sessão aguarda revisão.</p>
+            }
+            else
+            {
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>Sessão</th><th>Score</th><th>Ações</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in _pending)
+                        {
+                            <tr>
+                                <td><code>@entry.SessionId</code></td>
+                                <td>@(entry.Evaluation?.Score.ToString("F2") ?? "-")</td>
+                                <td>
+                                    <button class="btn btn-xs btn-success" @onclick="() => ApproveAsync(entry.SessionId)">Aprovar</button>
+                                    <button class="btn btn-xs btn-danger" @onclick="() => RejectAsync(entry.SessionId)">Rejeitar</button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+        <div class="card-footer">
+            <a class="btn btn-sm btn-outline-secondary" href="/apps/@AppId">Voltar</a>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string AppId { get; set; } = string.Empty;
+
+    private bool _loading = true;
+    private string? _error;
+    private KnowledgeLoopStatsDto? _stats;
+    private List<KnowledgeLoopEntryDto> _pending = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _stats = await Api.GetKnowledgeLoopStatsAsync(AppId);
+            _pending = (await Api.GetKnowledgeLoopPendingReviewAsync(AppId)).ToList();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ApproveAsync(string sessionId)
+    {
+        await Api.ApproveKnowledgeLoopAsync(AppId, sessionId);
+        await OnParametersSetAsync();
+    }
+
+    private async Task RejectAsync(string sessionId)
+    {
+        await Api.RejectKnowledgeLoopAsync(AppId, sessionId);
+        await OnParametersSetAsync();
+    }
+}

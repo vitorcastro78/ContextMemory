@@ -10,6 +10,7 @@ public sealed class SessionSummarizer : ISessionSummarizer
 {
     private readonly IConversationMemory _conversationMemory;
     private readonly ILlmAdapterResolver _adapterResolver;
+    private readonly IKnowledgeLoop? _knowledgeLoop;
     private readonly int _summarizeAfterMessages;
     private readonly int _keepRecentMessages;
     private readonly ILogger<SessionSummarizer> _logger;
@@ -18,10 +19,12 @@ public sealed class SessionSummarizer : ISessionSummarizer
         IConversationMemory conversationMemory,
         ILlmAdapterResolver adapterResolver,
         IOptions<ContextMemoryOptions> options,
-        ILogger<SessionSummarizer> logger)
+        ILogger<SessionSummarizer> logger,
+        IKnowledgeLoop? knowledgeLoop = null)
     {
         _conversationMemory = conversationMemory;
         _adapterResolver = adapterResolver;
+        _knowledgeLoop = knowledgeLoop;
         _summarizeAfterMessages = options.Value.SummarizeAfterMessages > 0
             ? options.Value.SummarizeAfterMessages
             : 50;
@@ -105,6 +108,11 @@ public sealed class SessionSummarizer : ISessionSummarizer
                 appId,
                 userId,
                 toSummarizeCount);
+
+            if (_knowledgeLoop is not null && toSummarize.Count >= 2)
+            {
+                _ = _knowledgeLoop.EvaluateSessionAsync(appId, userId, toSummarize, CancellationToken.None);
+            }
         }
         catch (Exception ex)
         {

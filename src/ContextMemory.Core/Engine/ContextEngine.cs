@@ -3,6 +3,7 @@ using System.Text.Json;
 using ContextMemory.Core.Configuration;
 using ContextMemory.Core.Contracts;
 using ContextMemory.Core.Models;
+using ContextMemory.Core.Tools;
 using Microsoft.Extensions.Options;
 
 namespace ContextMemory.Core.Engine;
@@ -30,6 +31,10 @@ public sealed class ContextEngine : IContextEngine
     private readonly ITelemetryCollector _telemetry;
     private readonly bool _contentFilterEnabled;
     private readonly bool _feedbackEnabled;
+    private readonly bool _toolCallEnabled;
+    private readonly ToolCallParser _toolCallParser;
+    private readonly IToolRegistry _toolRegistry;
+    private readonly BuiltinToolsRegistrar _builtinToolsRegistrar;
 
     public ContextEngine(
         IAppRegistry appRegistry,
@@ -51,7 +56,10 @@ public sealed class ContextEngine : IContextEngine
         IFeedbackProcessor feedbackProcessor,
         IMessageIdTracker messageIdTracker,
         ITelemetryCollector telemetry,
-        IOptions<ContextMemoryOptions> options)
+        IOptions<ContextMemoryOptions> options,
+        ToolCallParser toolCallParser,
+        IToolRegistry toolRegistry,
+        BuiltinToolsRegistrar builtinToolsRegistrar)
     {
         _appRegistry = appRegistry;
         _appConfigStore = appConfigStore;
@@ -74,6 +82,10 @@ public sealed class ContextEngine : IContextEngine
         _telemetry = telemetry;
         _contentFilterEnabled = options.Value.EnableContentFilter;
         _feedbackEnabled = options.Value.EnableFeedback;
+        _toolCallEnabled = options.Value.ToolCallEnabled;
+        _toolCallParser = toolCallParser;
+        _toolRegistry = toolRegistry;
+        _builtinToolsRegistrar = builtinToolsRegistrar;
     }
 
     public async Task<ChatPipelineResult> ProcessChatAsync(
@@ -100,7 +112,13 @@ public sealed class ContextEngine : IContextEngine
         var promptTokens = EstimateTokens(enriched.Messages);
 
         var adapter = _adapterResolver.Resolve(runtimeConfig.LlmBackend);
-        var response = await adapter.ChatAsync(enriched, cancellationToken).ConfigureAwait(false);
+        _builtinToolsRegistrar.EnsureRegistered(app.AppId, runtimeConfig);
+        var response = await RunChatWithToolsAsync(
+            app.AppId,
+            adapter,
+            enriched,
+            runtimeConfig,
+            cancellationToken).ConfigureAwait(false);
 
         var result = await PostProcessResponseAsync(
             app, userId, request, response, runtimeConfig, promptTokens, ragHit, cancellationToken).ConfigureAwait(false);
@@ -292,6 +310,39 @@ public sealed class ContextEngine : IContextEngine
         await _feedbackStore.RecordAsync(entry, cancellationToken).ConfigureAwait(false);
         _telemetry.RecordFeedback(appId, score);
         _feedbackProcessor.ProcessFeedbackAsync(appId, userId, messageId, score, reason);
+    }
+
+    private async Task<OllamaResponse> RunChatWithToolsAsync(
+        string appId,
+        ILlmAdapter adapter,
+        OllamaRequest request,
+        AppRuntimeConfig config,
+        CancellationToken cancellationToken)
+    {
+        var current = request;
+        var maxIterations = config.ToolCallMaxIterations > 0 ? config.ToolCallMaxIterations : 5;
+
+        if (!_toolCallEnabled || !config.ToolCallEnabled)
+            return await adapter.ChatAsync(current, cancellationToken).ConfigureAwait(false);
+
+        for (var i = 0; i < maxIterations; i++)
+        {
+            var response = await adapter.ChatAsync(current, cancellationToken).ConfigureAwait(false);
+            var content = response.Message?.Content ?? string.Empty;
+            if (!_toolCallParser.TryParse(content, out var toolCall) || toolCall is null)
+                return response;
+
+            var toolResult = await _toolRegistry
+                .ExecuteAsync(appId, toolCall.Name, toolCall.Arguments, cancellationToken)
+                .ConfigureAwait(false);
+
+            var messages = current.Messages.ToList();
+            messages.Add(new OllamaMessage { Role = "assistant", Content = _toolCallParser.StripToolCallMarkup(content) });
+            messages.Add(new OllamaMessage { Role = "tool", Content = toolResult });
+            current = current with { Messages = messages };
+        }
+
+        return await adapter.ChatAsync(current, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<(OllamaRequest Request, bool RagHit)> BuildEnrichedRequestAsync(

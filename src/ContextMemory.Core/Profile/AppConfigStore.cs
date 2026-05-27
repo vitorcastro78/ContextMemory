@@ -177,7 +177,25 @@ public sealed class AppConfigStore : IAppConfigStore
             {
                 RequestsPerMinute = _defaults.DefaultRateLimitRpm,
                 TokensPerMinute = _defaults.DefaultRateLimitTpm
-            }
+            },
+            KnowledgeLoopEnabled = configFile.KnowledgeLoopEnabled || _defaults.KnowledgeLoopEnabled,
+            KnowledgeLoopMinMessages = configFile.KnowledgeLoopMinMessages > 0
+                ? configFile.KnowledgeLoopMinMessages
+                : _defaults.KnowledgeLoopMinMessages,
+            KnowledgeLoopAutoApproveThreshold = configFile.KnowledgeLoopAutoApproveThreshold > 0
+                ? configFile.KnowledgeLoopAutoApproveThreshold
+                : _defaults.KnowledgeLoopAutoApproveThreshold,
+            KnowledgeLoopManualReviewThreshold = configFile.KnowledgeLoopManualReviewThreshold > 0
+                ? configFile.KnowledgeLoopManualReviewThreshold
+                : _defaults.KnowledgeLoopManualReviewThreshold,
+            KnowledgeLoopMaxChunksPerDay = configFile.KnowledgeLoopMaxChunksPerDay > 0
+                ? configFile.KnowledgeLoopMaxChunksPerDay
+                : _defaults.KnowledgeLoopMaxChunksPerDay,
+            ToolCallEnabled = configFile.ToolCallEnabled || _defaults.ToolCallEnabled,
+            ToolCallMaxIterations = configFile.ToolCallMaxIterations > 0
+                ? configFile.ToolCallMaxIterations
+                : _defaults.ToolCallMaxIterations,
+            PlanId = string.IsNullOrWhiteSpace(configFile.PlanId) ? _defaults.DefaultPlan : configFile.PlanId
         };
     }
 

@@ -18,6 +18,7 @@ public sealed class ContextMemoryDbContext : DbContext
     public DbSet<SemanticFactEntity> SemanticFacts => Set<SemanticFactEntity>();
     public DbSet<FeedbackEntity> Feedback => Set<FeedbackEntity>();
     public DbSet<AuditLogEntity> AuditLogs => Set<AuditLogEntity>();
+    public DbSet<KnowledgeLoopEntryEntity> KnowledgeLoopEntries => Set<KnowledgeLoopEntryEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -79,6 +80,20 @@ public sealed class ContextMemoryDbContext : DbContext
             e.Property(x => x.AppId).HasMaxLength(64);
             e.HasIndex(x => new { x.AppId, x.Timestamp });
         });
+
+        modelBuilder.Entity<KnowledgeLoopEntryEntity>(e =>
+        {
+            e.ToTable("knowledge_loop_entries");
+            e.HasKey(x => x.SessionId);
+            e.Property(x => x.SessionId).HasMaxLength(64);
+            e.Property(x => x.AppId).HasMaxLength(64);
+            e.Property(x => x.UserId).HasMaxLength(64);
+            e.Property(x => x.MessagesJson).HasColumnType("jsonb");
+            e.Property(x => x.EvaluationJson).HasColumnType("jsonb");
+            e.HasIndex(x => new { x.AppId, x.Status });
+            e.HasIndex(x => x.CreatedAt);
+        });
+
     }
 }
 
